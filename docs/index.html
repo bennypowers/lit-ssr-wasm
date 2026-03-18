@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>lit-ssr-wasm</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="demo.css">
+  <style>
+    .iframes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-block: 1.5rem;
+
+      @media (max-width: 60rem) {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .iframes > div {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+
+      h3 {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+
+        a {
+          font-size: 0.75rem;
+          font-weight: 400;
+        }
+      }
+    }
+
+    .iframes iframe {
+      flex: 1;
+      width: 100%;
+      min-height: 36rem;
+      border: 1px solid light-dark(#ddd, #444);
+      border-radius: 8px;
+      background: light-dark(#fff, #0a0a0a);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>lit-ssr-wasm</h1>
+    <p>Server-side render Lit web components from any language via WebAssembly</p>
+    <nav>
+      <a href="index.html" class="active">Overview</a>
+      <a href="compiled.html">Compiled</a>
+      <a href="runtime.html">Runtime</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="arch">
+      <span>LitElement (TS)</span>
+      <span>esbuild</span>
+      <span>Javy (QuickJS)</span>
+      <span>.wasm (2 MB)</span>
+      <span>Go / wazero</span>
+    </div>
+
+    <section>
+      <h2>How it works</h2>
+      <p>Standard <a href="https://lit.dev">Lit</a> web components are bundled
+        with <code>@lit-labs/ssr</code>, compiled to WebAssembly via
+        <a href="https://github.com/bytecodealliance/javy">Javy</a> (QuickJS),
+        and executed from Go using <a href="https://wazero.io">wazero</a>
+        (pure Go, no CGo).</p>
+      <p>The result: <strong>Declarative Shadow DOM</strong> injected into your
+        HTML on the server, giving users instant first paint with zero layout
+        shift. No Node.js sidecar required.</p>
+    </section>
+
+    <section>
+      <h2>Try both modes</h2>
+      <div class="iframes">
+        <div>
+          <h3>
+            Compiled
+            <a href="compiled.html">open fullscreen &rarr;</a>
+          </h3>
+          <iframe src="compiled.html"
+                  title="Compiled mode demo"
+                  loading="lazy"></iframe>
+        </div>
+        <div>
+          <h3>
+            Runtime
+            <a href="runtime.html">open fullscreen &rarr;</a>
+          </h3>
+          <iframe src="runtime.html"
+                  title="Runtime mode demo"
+                  loading="lazy"></iframe>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Two modes</h2>
+      <div class="columns">
+        <div class="mode-card">
+          <h3>Compiled</h3>
+          <p>Component definitions are baked into the WASM module at build time.
+            Fast, predictable, ideal for <code>cem serve</code> or static site
+            generators.</p>
+          <a href="compiled.html">Try it live &rarr;</a>
+        </div>
+        <div class="mode-card">
+          <h3>Runtime</h3>
+          <p>Component definitions are provided as JavaScript source at render
+            time. Flexible, dynamic, ideal for design tools or component
+            playgrounds.</p>
+          <a href="runtime.html">Try it live &rarr;</a>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

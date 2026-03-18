@@ -1,0 +1,18 @@
+<x-tabs>
+  <x-tab slot="tab" active>Overview</x-tab>
+  <x-tab-panel>
+    <p>Lit SSR renders your LitElement components to Declarative Shadow DOM
+      on the server, giving users instant first paint with no layout shift.</p>
+  </x-tab-panel>
+  <x-tab slot="tab">Architecture</x-tab>
+  <x-tab-panel>
+    <p>The pipeline: TypeScript components are bundled with esbuild,
+      compiled to WASM via Javy (QuickJS), and executed from Go using
+      the wazero pure-Go WASM runtime.</p>
+  </x-tab-panel>
+  <x-tab slot="tab">Performance</x-tab>
+  <x-tab-panel>
+    <p>Cold start ~350ms per render. The 2MB WASM module embeds
+      QuickJS, Lit SSR, and all component definitions.</p>
+  </x-tab-panel>
+</x-tabs>

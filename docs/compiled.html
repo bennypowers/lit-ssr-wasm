@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Compiled Mode - lit-ssr-wasm</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+  <header>
+    <h1>lit-ssr-wasm</h1>
+    <p>Server-side render Lit web components from any language via WebAssembly</p>
+    <nav>
+      <a href="index.html">Overview</a>
+      <a href="compiled.html" class="active">Compiled Mode</a>
+      <a href="runtime.html">Runtime Mode</a>
+    </nav>
+  </header>
+
+  <main>
+    <section>
+      <h2>Compiled Mode</h2>
+      <p>Component definitions are baked into the module at build time.
+        Edit the HTML below and click <strong>Render</strong> to see
+        Lit SSR inject Declarative Shadow DOM in real time.</p>
+
+      <div class="editor">
+        <div>
+          <h3>Input HTML</h3>
+          <textarea id="input" spellcheck="false"><x-card>
+  <h2 slot="header">Status Dashboard</h2>
+  <x-tabs>
+    <x-tab slot="tab" active>Services</x-tab>
+    <x-tab-panel>
+      <p>API Gateway <x-badge state="success">up</x-badge></p>
+      <p>Auth Service <x-badge state="warning">degraded</x-badge></p>
+      <p>Database <x-badge state="danger">down</x-badge></p>
+    </x-tab-panel>
+    <x-tab slot="tab">Metrics</x-tab>
+    <x-tab-panel>
+      <p>Uptime: 99.7% <x-badge state="info">30d</x-badge></p>
+    </x-tab-panel>
+  </x-tabs>
+  <x-cta slot="footer" variant="primary">View details</x-cta>
+</x-card></textarea>
+        </div>
+        <div>
+          <h3>SSR Output</h3>
+          <pre id="output"><code>Click "Render" to see the output</code></pre>
+        </div>
+      </div>
+
+      <button class="render" id="render-btn">Render</button>
+      <span class="timing" id="timing"></span>
+
+      <h3>Live Preview (DSD rendered in-page)</h3>
+      <div class="preview" id="preview"></div>
+    </section>
+
+    <section>
+      <h2>Available components</h2>
+      <p>These Lit elements are compiled into the bundle:</p>
+      <ul>
+        <li><code>&lt;x-card&gt;</code> - Card with header, body, image, and footer slots</li>
+        <li><code>&lt;x-cta&gt;</code> - Call-to-action button (variants: primary, secondary)</li>
+        <li><code>&lt;x-tabs&gt;</code> - Tab container</li>
+        <li><code>&lt;x-tab&gt;</code> - Individual tab (attributes: active, disabled)</li>
+        <li><code>&lt;x-tab-panel&gt;</code> - Tab panel content</li>
+        <li><code>&lt;x-badge&gt;</code> - Status badge (states: success, warning, danger, info, neutral)</li>
+      </ul>
+    </section>
+  </main>
+
+  <script type="module">
+    import { render } from './compiled-mode.mjs';
+
+    const input = document.getElementById('input');
+    const output = document.getElementById('output');
+    const preview = document.getElementById('preview');
+    const timing = document.getElementById('timing');
+    const btn = document.getElementById('render-btn');
+
+    function escapeHTML(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function doRender() {
+      const t0 = performance.now();
+      const result = render(input.value);
+      const ms = (performance.now() - t0).toFixed(1);
+      output.innerHTML = `<code>${escapeHTML(result)}</code>`;
+      preview.innerHTML = result;
+      timing.textContent = `Rendered in ${ms}ms`;
+    }
+
+    btn.addEventListener('click', doRender);
+
+    // Auto-render on load
+    doRender();
+  </script>
+</body>
+</html>

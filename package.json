@@ -1,0 +1,21 @@
+{
+  "name": "lit-ssr-wasm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node --import tsx/esm scripts/build.ts",
+    "build:wasm": "npm run build && javy build -J javy-stream-io=y -J text-encoding=y dist/lit-ssr-javy.mjs -o dist/lit-ssr.wasm",
+    "build:demo": "node --import tsx/esm scripts/build-demo.ts",
+    "test": "node --import tsx/esm --test src/**/*.test.ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "lit": "^3.3.0",
+    "@lit-labs/ssr": "^4.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.0",
+    "tsx": "^4.19.0"
+  }
+}

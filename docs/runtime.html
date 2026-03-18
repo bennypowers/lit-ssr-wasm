@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Runtime Mode - lit-ssr-wasm</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+  <header>
+    <h1>lit-ssr-wasm</h1>
+    <p>Server-side render Lit web components from any language via WebAssembly</p>
+    <nav>
+      <a href="index.html">Overview</a>
+      <a href="compiled.html">Compiled Mode</a>
+      <a href="runtime.html" class="active">Runtime Mode</a>
+    </nav>
+  </header>
+
+  <main>
+    <section>
+      <h2>Runtime Mode</h2>
+      <p>Component definitions are provided as JavaScript source at render time.
+        Write a LitElement class below, provide HTML that uses it, and watch
+        Lit SSR render it with Declarative Shadow DOM on the fly.</p>
+
+      <div class="editor">
+        <div>
+          <h3>Component Definition (JavaScript)</h3>
+          <textarea id="component-src" spellcheck="false">import { LitElement, html, css } from 'lit';
+
+class MyAlert extends LitElement {
+  static properties = {
+    type: { type: String, reflect: true },
+  };
+
+  static styles = css`
+    :host { display: block; padding: 1rem; border-radius: 8px; margin: 0.5rem 0; }
+    :host([type="success"]) { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    :host([type="error"])   { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    :host([type="info"])    { background: #cce5ff; color: #004085; border: 1px solid #b8daff; }
+    #icon { margin-inline-end: 0.5rem; }
+  `;
+
+  get #icon() {
+    switch (this.type) {
+      case 'success': return '\u2705';
+      case 'error':   return '\u274c';
+      case 'info':    return '\u2139\ufe0f';
+      default:        return '\u2139\ufe0f';
+    }
+  }
+
+  render() {
+    return html`<span id="icon">${this.#icon}</span><slot></slot>`;
+  }
+}
+
+customElements.define('my-alert', MyAlert);</textarea>
+        </div>
+        <div>
+          <h3>HTML to Render</h3>
+          <textarea id="input" spellcheck="false"><my-alert type="success">Deployment complete</my-alert>
+<my-alert type="error">Build failed: exit code 1</my-alert>
+<my-alert type="info">Next deploy scheduled for 3:00 PM</my-alert></textarea>
+        </div>
+      </div>
+
+      <button class="render" id="render-btn">Render</button>
+      <span class="timing" id="timing"></span>
+
+      <div class="editor">
+        <div>
+          <h3>SSR Output</h3>
+          <pre id="output"><code>Click "Render" to see the output</code></pre>
+        </div>
+        <div>
+          <h3>Live Preview</h3>
+          <div class="preview" id="preview"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>How it works</h2>
+      <p>Your component source is evaluated as a JavaScript module. After
+        <code>customElements.define()</code> registers the element, the rendering
+        harness discovers it and uses <code>@lit-labs/ssr</code> to produce
+        Declarative Shadow DOM.</p>
+      <p>In a Go application, this same flow happens inside the WASM module:
+        component JS is provided alongside HTML, both are fed to the QuickJS
+        runtime, and the rendered HTML comes back.</p>
+    </section>
+  </main>
+
+  <script type="module">
+    import { loadAndRender } from './runtime-mode.mjs';
+
+    const componentSrc = document.getElementById('component-src');
+    const input = document.getElementById('input');
+    const output = document.getElementById('output');
+    const preview = document.getElementById('preview');
+    const timing = document.getElementById('timing');
+    const btn = document.getElementById('render-btn');
+
+    function escapeHTML(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Rendering...';
+      try {
+        const t0 = performance.now();
+        const result = await loadAndRender(componentSrc.value, input.value);
+        const ms = (performance.now() - t0).toFixed(1);
+        output.innerHTML = `<code>${escapeHTML(result)}</code>`;
+        preview.innerHTML = result;
+        timing.textContent = `Rendered in ${ms}ms`;
+      } catch (e) {
+        output.innerHTML = `<code style="color:red">${escapeHTML(String(e))}</code>`;
+        timing.textContent = '';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Render';
+      }
+    });
+  </script>
+</body>
+</html>

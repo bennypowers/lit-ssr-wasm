@@ -1,0 +1,16 @@
+<x-card>
+  <h2 slot="header">Status Dashboard</h2>
+  <x-tabs>
+    <x-tab slot="tab" active>Services</x-tab>
+    <x-tab-panel>
+      <p>API Gateway <x-badge state="success">operational</x-badge></p>
+      <p>Auth Service <x-badge state="warning">degraded</x-badge></p>
+      <p>Database <x-badge state="danger">outage</x-badge></p>
+    </x-tab-panel>
+    <x-tab slot="tab">Metrics</x-tab>
+    <x-tab-panel>
+      <p>Uptime: 99.7% <x-badge state="info">30d</x-badge></p>
+    </x-tab-panel>
+  </x-tabs>
+  <x-cta slot="footer" variant="secondary">View details</x-cta>
+</x-card>

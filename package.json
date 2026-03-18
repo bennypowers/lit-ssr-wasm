@@ -11,10 +11,12 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "lit": "^3.3.0",
-    "@lit-labs/ssr": "^4.0.0"
+    "@lit-labs/ssr": "^4.0.0",
+    "lit": "^3.3.0"
   },
   "devDependencies": {
+    "@rhds/elements": "^4.0.4",
+    "@rhds/tokens": "^3.0.2",
     "esbuild": "^0.27.0",
     "tsx": "^4.19.0"
   }

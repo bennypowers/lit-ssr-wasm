@@ -12,36 +12,37 @@ import { processHTML } from '../harness/render.js';
  * Load component definitions from JS source, then render HTML.
  *
  * The JS source should call customElements.define() for each component.
- * After eval, we discover registered elements and render with SSR.
+ * The source is injected as a <script type="module"> so the page's
+ * import map applies, allowing bare specifiers like `import ... from 'lit'`.
  */
 export async function loadAndRender(
   componentSource: string,
-  html: string,
+  htmlInput: string,
+  knownElements: string[],
 ): Promise<string> {
-  // Eval the component source as a module via blob URL.
-  // This lets the source use `import { LitElement } from 'lit'` etc.
-  // We pre-bundle lit into a helper that the eval'd code can import.
-  const blob = new Blob([componentSource], { type: 'text/javascript' });
-  const url = URL.createObjectURL(blob);
+  // Inject source as an inline module script. The page's import map
+  // lets it resolve bare specifiers like 'lit'.
+  const script = document.createElement('script');
+  script.type = 'module';
+  script.textContent = componentSource;
+
+  // Wait for the module to execute by appending a sentinel.
+  const sentinel = `__litssr_ready_${Date.now()}`;
+  const ready = new Promise<void>(resolve => {
+    (globalThis as any)[sentinel] = resolve;
+  });
+  script.textContent += `\n;globalThis["${sentinel}"]?.();`;
+  document.head.append(script);
+
   try {
-    await import(/* @vite-ignore */ url);
+    await ready;
   } finally {
-    URL.revokeObjectURL(url);
+    script.remove();
+    delete (globalThis as any)[sentinel];
   }
 
-  // Discover all custom elements that contain a hyphen (web component convention).
-  // The SSR shim's customElements registry tracks definitions.
-  const known = new Set<string>();
-  // @ts-expect-error __definitions is a Lit SSR shim internal
-  const defs = customElements.__definitions ?? customElements._registry;
-  if (defs && typeof defs[Symbol.iterator] === 'function') {
-    for (const [name] of defs) {
-      known.add(name);
-    }
-  }
-
-  return processHTML(html, known);
+  const known = new Set(knownElements);
+  return processHTML(htmlInput, known);
 }
 
-// Also export direct processHTML for cases where the caller manages registration.
 export { processHTML };

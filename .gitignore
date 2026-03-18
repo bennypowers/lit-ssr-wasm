@@ -1,3 +1,5 @@
 node_modules/
 dist/
 go/lit-ssr.wasm
+docs/*.html
+docs/*.mjs

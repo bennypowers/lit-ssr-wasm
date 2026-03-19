@@ -70,9 +70,8 @@
       const defineRe = /customElements\.define\(\s*['"]([^'"]+)['"]/g;
       const elements = [...componentSrc.value.matchAll(defineRe)].map(m => m[1]);
 
-      const payload = JSON.stringify({source, html: input.value, elements});
       const t0 = performance.now();
-      const {stdout, stderr} = await run(wasmModule, payload);
+      const {stdout, stderr} = await run(wasmModule, {source, html: input.value, elements});
       const ms = (performance.now() - t0).toFixed(1);
 
       if (stderr) {

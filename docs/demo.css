@@ -160,3 +160,7 @@ code {
   color: light-dark(var(--rh-color-text-secondary-on-light), var(--rh-color-text-secondary-on-dark));
   margin-inline-start: var(--rh-space-md);
 }
+
+rh-code-block {
+  margin-inline: auto;
+}

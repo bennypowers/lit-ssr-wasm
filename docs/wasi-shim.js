@@ -82,11 +82,16 @@ export function createWasi(stdinBuf) {
 const encoder = new TextEncoder();
 
 /**
- * Run a WASM module with the given stdin string.
- * Returns { stdout, stderr }.
+ * Run a WASM module with the given stdin.
+ * Pass a string for raw NUL-delimited protocol (builtin mode),
+ * or an object for JSON line protocol (runtime mode).
+ * Returns { stdout, stderr } with the trailing NUL stripped.
  */
 export async function run(wasmModule, stdin) {
-  const wasi = createWasi(encoder.encode(stdin));
+  const payload = typeof stdin === 'string'
+    ? stdin + '\0'
+    : JSON.stringify(stdin) + '\n';
+  const wasi = createWasi(encoder.encode(payload));
   try {
     instance = await WebAssembly.instantiate(wasmModule, wasi.imports);
     instance.exports._start();
@@ -95,5 +100,7 @@ export async function run(wasmModule, stdin) {
       throw new Error(wasi.stderr || e.message);
     }
   }
-  return { stdout: wasi.stdout, stderr: wasi.stderr };
+  // Strip trailing NUL delimiter
+  const stdout = wasi.stdout.replace(/\0$/, '');
+  return { stdout, stderr: wasi.stderr };
 }

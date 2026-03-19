@@ -19,30 +19,44 @@ LitElement (TS) --> esbuild --> Javy (QuickJS) --> .wasm (2 MB) --> Go / wazero
 
 **[Try it in your browser][demo]**
 
-The demo runs Lit SSR directly in the browser (the same rendering engine used
-in the WASM module), so you can experiment with both modes interactively.
+The demo runs the actual WASM modules directly in the browser using a minimal
+WASI shim. The compiled mode demo does not load any JavaScript definition of
+`<my-alert>` on the page -- the styles you see come entirely from Declarative
+Shadow DOM output by the WASM module.
 
 ---
 
-## Two Modes
+## Two WASM Modules
 
-### Compiled Mode
+### Builtin Mode (`lit-ssr-builtin.wasm`)
 
-Component definitions are baked into the WASM module at build time. Fast,
-predictable, and ideal for:
+Component definitions are baked into the WASM module at build time. The module
+reads HTML from stdin and writes DSD-enhanced HTML to stdout.
 
-- Static site generators (like `cem serve`)
-- Build pipelines where components are known ahead of time
-- Applications where render latency matters (~350ms cold start)
+```sh
+printf '<x-card><h2 slot="header">Hello</h2><p>World</p></x-card>\0' \
+  | wasmtime lit-ssr-builtin.wasm
+```
 
-### Runtime Mode
+Fast and predictable -- ideal for static site generators, build pipelines, or
+any scenario where components are known ahead of time.
 
-Component definitions are provided as JavaScript source at render time.
-Flexible and dynamic, ideal for:
+### Runtime Mode (`lit-ssr-runtime.wasm`)
 
-- Design tools and component playgrounds
-- Scenarios where components change without rebuilding the WASM module
-- Development servers that pick up component changes on the fly
+No component definitions are baked in. The module reads JSON from stdin
+containing the component JavaScript source, HTML to render, and element tag
+names. Lit APIs (`LitElement`, `html`, `css`, `classMap`, etc.) are exposed as
+globals inside the QuickJS context, so user-provided source does not need import
+statements. The source is evaluated internally by QuickJS, registering custom
+elements, then the HTML is rendered with DSD.
+
+```sh
+echo '{"source":"class MyEl extends LitElement { ... }","html":"<my-el></my-el>","elements":["my-el"]}' \
+  | wasmtime lit-ssr-runtime.wasm
+```
+
+Ideal for design tools, component playgrounds, or development servers that pick
+up component changes on the fly.
 
 ---
 
@@ -58,23 +72,58 @@ Flexible and dynamic, ideal for:
 
 ```sh
 npm install
-npm run build          # Produces dist/lit-ssr-bundle.mjs and dist/lit-ssr-javy.mjs
-npm run build:wasm     # Compiles to dist/lit-ssr.wasm (requires javy in PATH)
+npm run build     # Builds everything: JS bundles, WASM modules, demo site
+```
+
+### Development
+
+```sh
+npm start         # Live-reloading dev server on http://localhost:3000
 ```
 
 ### Test with Node.js
 
 ```sh
-echo '<x-card><h2 slot="header">Hello</h2><p>World</p></x-card>' \
-  | node dist/lit-ssr-bundle.mjs
+printf '<x-card><h2 slot="header">Hello</h2><p>World</p></x-card>\0' \
+  | node dist/lit-ssr-bundle.js
 ```
 
 ### Test with Go
 
 ```sh
-cp dist/lit-ssr.wasm go/lit-ssr.wasm
+cp dist/lit-ssr-builtin.wasm go/lit-ssr.wasm
 cd go && go test -v
 ```
+
+---
+
+## Wire Protocol
+
+Both WASM modules use a read-loop protocol that keeps instances warm across
+multiple renders, amortizing the ~350ms cold start.
+
+### Builtin mode
+
+NUL-delimited on both sides:
+
+```
+stdin:  <raw HTML>\0
+stdout: <rendered HTML>\0
+```
+
+### Runtime mode
+
+JSON line in, NUL-delimited HTML out:
+
+```
+stdin:  {"source":"...","html":"...","elements":[...]}\n
+stdout: <rendered HTML>\0
+```
+
+Errors are written to stderr. On error, stdout gets an empty response (`\0`).
+
+The module exits cleanly when stdin reaches EOF. Send multiple requests on
+the same stdin pipe to reuse the warm instance.
 
 ---
 
@@ -84,27 +133,30 @@ cd go && go test -v
 lit-ssr-wasm/
 +-- src/
 |   +-- harness/
-|   |   +-- render.ts         # Core SSR pipeline (processHTML, renderElementToString)
+|   |   +-- render.ts             # Core SSR pipeline
 |   +-- io/
-|   |   +-- javy.ts           # Javy.IO stdin/stdout for WASM
-|   |   +-- node.ts           # node:fs stdin/stdout for Node.js
-|   +-- components/            # Example Lit elements (x-card, x-tabs, etc.)
-|   +-- demo/
-|   |   +-- compiled.ts       # Browser bundle: components baked in
-|   |   +-- runtime.ts        # Browser bundle: dynamic component loading
-|   +-- entry.ts              # WASM/CLI entry point
+|   |   +-- javy.ts               # Javy.IO for WASM (readUntilNul, readLine)
+|   |   +-- node.ts               # node:fs for Node.js
+|   +-- components/               # Lit elements (x-card, x-tabs, my-alert, etc.)
+|   +-- entry.ts                  # Builtin mode WASM entry (read loop)
+|   +-- runtime-entry.ts          # Runtime mode WASM entry (read loop)
+|   +-- ssr-rhds.ts               # SSR entry for demo site chrome
 +-- scripts/
-|   +-- build.ts              # esbuild: ESM for Node + ESM for Javy
-|   +-- build-demo.ts         # Builds GH Pages demo bundles
+|   +-- build.ts                  # esbuild: JS bundles for Node + Javy
+|   +-- build-demo.ts             # Assembles demo site into _site/
+|   +-- dev-server.ts             # Live-reloading dev server
 +-- go/
-|   +-- litssr.go             # Go package: Renderer using wazero
-|   +-- litssr_test.go        # Go tests
+|   +-- litssr.go                 # Go package: worker pool using wazero
+|   +-- litssr_test.go            # Tests + benchmarks
 |   +-- go.mod
-+-- docs/                      # GitHub Pages demo site
-|   +-- index.html            # Side-by-side compiled and runtime demos
-|   +-- compiled.html         # Compiled mode standalone demo
-|   +-- runtime.html          # Runtime mode standalone demo
-+-- demo/fixtures/             # Example HTML inputs
++-- docs/                         # Demo site source (pages, layout, CSS)
+|   +-- _layout.html              # Shared chrome (header, subnav, import map)
+|   +-- compiled.html             # Compiled mode demo
+|   +-- runtime.html              # Runtime mode demo
+|   +-- index.html                # How it Works page
+|   +-- wasi-shim.js              # Browser WASI shim for running WASM
+|   +-- highlighted-textarea.js   # Prism-highlighted textarea component
++-- _site/                        # Build output (gitignored)
 ```
 
 ---
@@ -114,41 +166,39 @@ lit-ssr-wasm/
 ### The Rendering Pipeline
 
 1. **Author components** as standard LitElement classes in TypeScript
-2. **Bundle** with [esbuild][esbuild] into a single ESM file, with Node.js
-   built-in modules stubbed out (QuickJS does not need them)
-3. **Compile** to WebAssembly with [Javy][javy], which embeds QuickJS as the JS
-   runtime
-4. **Execute** from Go via [wazero][wazero]: pipe HTML into stdin, get
-   DSD-enhanced HTML from stdout
+2. **Bundle** with [esbuild][esbuild] into a single ESM file. Node.js built-in
+   modules are stubbed with lightweight shims (`Buffer` wraps
+   `TextEncoder`/`Uint8Array`)
+3. **Compile** to WebAssembly with [Javy][javy]. The JS bundle and QuickJS
+   engine are embedded together in one `.wasm` file (~2 MB)
+4. **Execute** from any WASI host: pipe HTML to stdin, get DSD-enhanced HTML
+   from stdout
 
 ### Why This Works
 
 Lit SSR deliberately avoids full DOM emulation. It intercepts Lit's template
 system at the string level, using a minimal DOM shim
-(`@lit-labs/ssr-dom-shim`). This makes it feasible to run in QuickJS via WASM
--- you do not need a full browser engine, just enough JS runtime to execute
-Lit's template rendering logic.
+(`@lit-labs/ssr-dom-shim`) that provides just enough of the `HTMLElement` and
+`customElements` API for Lit's rendering logic. This means it runs comfortably
+in QuickJS -- no full browser engine needed.
 
-The WASM module communicates via WASI stdin/stdout, making it callable from any
-language with a WASI-compatible WASM runtime.
+### Declarative Shadow DOM
 
-### Stubbing Node.js APIs
+The WASM module's output includes `<template shadowrootmode="open">` elements
+containing the component's styles and rendered shadow DOM. The browser attaches
+these as shadow roots during HTML parsing, before any JavaScript runs. Users see
+styled, laid-out content on first paint with zero layout shift.
 
-[`@lit-labs/ssr`][lit-ssr] depends on [parse5][parse5] (an HTML parser) which
-imports Node's `buffer` module. Since QuickJS does not provide Node.js built-in
-modules, the build script replaces them with lightweight stubs. The `Buffer`
-stub wraps `TextEncoder`/`Uint8Array`, which is sufficient for the SSR code
-path.
-
-This is safe because Lit SSR's rendering pipeline only needs string
-manipulation capabilities, not actual filesystem or network access.
+The component's JavaScript definition is not needed on the page for DSD styles
+to apply.
 
 ---
 
 ## Go Library API
 
 The `go/` directory contains a self-contained Go package with the WASM module
-embedded via `//go:embed`.
+embedded via `//go:embed`. The renderer manages a pool of warm WASM instances
+for concurrent rendering.
 
 ```go
 package main
@@ -164,19 +214,33 @@ import (
 func main() {
     ctx := context.Background()
 
-    renderer, err := litssr.New(ctx)
+    // Start a renderer pool (0 = one worker per CPU core)
+    renderer, err := litssr.New(ctx, 0)
     if err != nil {
         log.Fatal(err)
     }
     defer renderer.Close(ctx)
 
-    html := `<x-card><h2 slot="header">Hello</h2><p>World</p></x-card>`
-
-    output, err := renderer.RenderHTML(ctx, html)
+    // Single render
+    html, err := renderer.RenderHTML(ctx, `<x-card><h2 slot="header">Hello</h2><p>World</p></x-card>`)
     if err != nil {
         log.Fatal(err)
     }
-    fmt.Println(output)
+    fmt.Println(html)
+
+    // Batch render (distributed across workers)
+    inputs := []string{
+        `<x-card><p>One</p></x-card>`,
+        `<x-card><p>Two</p></x-card>`,
+        `<x-card><p>Three</p></x-card>`,
+    }
+    results, err := renderer.RenderBatch(ctx, inputs)
+    if err != nil {
+        log.Fatal(err)
+    }
+    for _, r := range results {
+        fmt.Println(r)
+    }
 }
 ```
 
@@ -184,47 +248,117 @@ func main() {
 
 | Function | Description |
 |---|---|
-| `New(ctx) (*Renderer, error)` | Create a renderer. Pre-compiles the WASM module. |
-| `(*Renderer).RenderHTML(ctx, html) (string, error)` | Render HTML with DSD injection. |
-| `(*Renderer).Close(ctx) error` | Release all resources. |
+| `New(ctx, workers) (*Renderer, error)` | Create a renderer pool. 0 workers = `runtime.NumCPU()`. |
+| `(*Renderer).RenderHTML(ctx, html) (string, error)` | Render HTML with DSD. Concurrent-safe. |
+| `(*Renderer).RenderBatch(ctx, inputs) ([]string, error)` | Batch render across workers. Ordered results. |
+| `(*Renderer).Close(ctx) error` | Shut down workers and release resources. |
 
 ### Performance
 
 | Metric | Value |
 |---|---|
 | WASM module size | ~2 MB |
-| Cold start (first render) | ~350ms |
-| Subsequent renders | ~320ms |
+| Cold start (pool init) | ~350ms |
+| Warm render (single) | ~0.32ms |
+| Batch of 50 | ~1ms total |
 | Go dependency | [wazero][wazero] only (pure Go, no CGo) |
 
-Each render creates a fresh WASM module instance. For production use, consider:
-
-- Pooling renderer instances across goroutines
-- Batching multiple elements into a single render call
-- Pre-warming the renderer at application startup
+WASM instances stay warm across renders via the read-loop protocol. The ~350ms
+cold start is paid once at pool initialization. Subsequent renders run at
+~0.32ms each, or ~20us/render when batched across multiple CPU cores.
 
 ---
 
-## Adding Your Own Components
+## Building Your Own WASM Module
 
-### Compiled Mode
+The builtin WASM module ships with the example components. To build a module
+with your own components:
 
-1. Create a LitElement in `src/components/my-element.ts`
-2. Import it in `src/entry.ts`
-3. Add the tag name to the `KNOWN_ELEMENTS` set
-4. Rebuild: `npm run build && npm run build:wasm`
+### 1. Write your components
+
+Standard LitElement classes in TypeScript. Nothing special needed.
+
+```typescript
+// src/components/my-widget.ts
+import { LitElement, html, css } from 'lit';
+import { customElement, property } from 'lit/decorators.js';
+
+@customElement('my-widget')
+export class MyWidget extends LitElement {
+  @property() accessor label = '';
+
+  static styles = css`:host { display: block; }`;
+
+  override render() {
+    return html`<div>${this.label}</div>`;
+  }
+}
+```
+
+### 2. Create an entry point
+
+Import your components and list their tag names:
+
+```typescript
+// src/entry.ts
+import { processHTML } from './harness/render.js';
+import { readUntilNul, writeStdout, writeStderr } from './io.js';
+
+import './components/my-widget.js';
+
+const KNOWN = new Set(['my-widget']);
+
+for (;;) {
+  const input = readUntilNul();
+  if (input === null) break;
+  try {
+    writeStdout(processHTML(input, KNOWN) + '\0');
+  } catch (e) {
+    writeStderr((e instanceof Error ? e.message : String(e)) + '\n');
+    writeStdout('\0');
+  }
+}
+```
+
+### 3. Build
+
+```sh
+npm run build    # Produces dist/lit-ssr-builtin.wasm
+```
+
+### 4. Use from Go
+
+Copy the WASM into your Go module and embed it:
+
+```go
+package myssr
+
+import (
+    "context"
+    _ "embed"
+    // same pool/worker structure as go/litssr.go
+)
+
+//go:embed my-components.wasm
+var wasmBytes []byte
+```
+
+Or use the `go/litssr.go` package directly by replacing `go/lit-ssr.wasm` with
+your custom-built module.
 
 ### Runtime Mode
 
-Provide your component source as JavaScript at render time. The source must
-call `customElements.define()` to register the element. See the
-[runtime demo][demo-runtime] for a live example.
+Alternatively, use `lit-ssr-runtime.wasm` to render any component without
+rebuilding. Provide the component source as JavaScript at render time. Note
+that QuickJS does not support TC39 decorators -- use `static properties` and
+`customElements.define()` instead. See the [runtime demo][demo-runtime] for a
+live example.
 
 ---
 
 ## Example Components
 
-The repo includes six example components to demonstrate the approach:
+The repo includes example components to demonstrate the approach:
 
 | Component | Description |
 |---|---|
@@ -234,36 +368,7 @@ The repo includes six example components to demonstrate the approach:
 | `<x-tab>` | Tab trigger (attributes: active, disabled) |
 | `<x-tab-panel>` | Tab panel content |
 | `<x-badge>` | Status badge (states: success, warning, danger, info, neutral) |
-
-All components use TypeScript with standard ES2025 decorators and the
-`accessor` keyword:
-
-```typescript
-import { LitElement, html, css } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
-
-@customElement('x-badge')
-export class XBadge extends LitElement {
-  @property({ reflect: true })
-  accessor state: 'success' | 'warning' | 'danger' | 'info' | 'neutral' = 'neutral';
-
-  static styles = css`
-    :host { display: inline-block; }
-    span {
-      padding: 0.125em 0.5em;
-      border-radius: 64px;
-      font-size: 0.75rem;
-      font-weight: 700;
-    }
-    :host([state="success"]) span { background: #3e8635; color: #fff; }
-    :host([state="danger"])  span { background: #c9190b; color: #fff; }
-  `;
-
-  override render() {
-    return html`<span><slot></slot></span>`;
-  }
-}
-```
+| `<my-alert>` | Alert banner (states: success, error, info) with light-dark() |
 
 ---
 
@@ -278,7 +383,8 @@ maintainer) commented:
 > that and report back."
 
 This project proves it works: real Lit SSR, real LitElements, compiled to WASM
-via Javy, callable from Go with zero Node.js dependency.
+via Javy, callable from Go with zero Node.js dependency. Warm renders at 0.32ms
+with a worker pool.
 
 ---
 
@@ -296,5 +402,5 @@ MIT
 [parse5]: https://www.npmjs.com/package/parse5
 [nodejs]: https://nodejs.org
 [golang]: https://go.dev
-[demo]: https://bennypowers.github.io/lit-ssr-wasm/
+[demo]: https://bennypowers.github.io/lit-ssr-wasm/compiled.html
 [demo-runtime]: https://bennypowers.github.io/lit-ssr-wasm/runtime.html

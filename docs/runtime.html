@@ -1,122 +1,94 @@
-<!doctype html>
-<html lang="en">
+<!-- title: Runtime Mode - lit-ssr-wasm -->
+<h2>Runtime Mode</h2>
+<p>No component definitions are baked into the WASM module. Write a
+  LitElement class below, provide HTML that uses it, and the WASM
+  module will evaluate your JavaScript in its internal QuickJS engine,
+  register the custom element, and render it with Declarative Shadow
+  DOM.</p>
 
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1">
-  <title>Runtime Mode - lit-ssr-wasm</title>
-  <meta name="color-scheme"
-        content="light dark">
-  <link rel="stylesheet"
-        href="demo.css">
-  <script type="importmap">
-    {
-      "imports": {
-        "lit": "./lit.mjs",
-        "lit/": "./lit.mjs?",
-        "lit/decorators.js": "./lit-decorators.mjs"
-      }
-    }
-  </script>
-</head>
+<p>Try changing the colour of an alert state in the element definition's CSS and rerendering</p>
 
-<body>
-  <main>
-    <h2>Runtime Mode</h2>
-    <p>Component definitions are provided as JavaScript source at render time.
-      Write a LitElement class below, provide HTML that uses it, and watch
-      Lit SSR render it with Declarative Shadow DOM on the fly.</p>
+<div class="editor">
+  <div>
+    <h3>Component Definition (JavaScript)</h3>
+    <highlighted-textarea id="component-src" language="javascript">{{my-alert}}</highlighted-textarea>
+  </div>
+  <div>
+    <h3>HTML to Render</h3>
+    <highlighted-textarea id="input" language="html">&lt;my-alert type="success"&gt;Deployment complete&lt;/my-alert&gt;
+&lt;my-alert type="error"&gt;Build failed: exit code 1&lt;/my-alert&gt;
+&lt;my-alert type="info"&gt;Next deploy scheduled for 3:00 PM&lt;/my-alert&gt;</highlighted-textarea>
+  </div>
+</div>
 
-    <div class="editor">
-      <div>
-        <h3>Component Definition (JavaScript)</h3>
-        <textarea id="component-src"
-                  spellcheck="false">import { LitElement, html, css } from 'lit';
+<rh-button id="render-btn">Render</rh-button>
+<span class="timing"
+      id="timing"></span>
 
-class MyAlert extends LitElement {
-  static properties = {
-    type: { type: String, reflect: true },
-  };
+<h3>Live Preview</h3>
+<div class="preview"
+     id="preview"></div>
 
-  static styles = css`
-    :host { display: block; padding: 1rem; border-radius: 8px; margin: 0.5rem 0; }
-    :host([type="success"]) { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-    :host([type="error"])   { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-    :host([type="info"])    { background: #cce5ff; color: #004085; border: 1px solid #b8daff; }
-    #icon { margin-inline-end: 0.5rem; }
-  `;
+<h3>SSR Output</h3>
+<template id="output-template">
+  <rh-code-block actions="copy wrap"
+                 highlighting="client"
+                 language="html"
+                 full-height>
+    <script type="text/html"></script>
+  </rh-code-block>
+</template>
+<div id="output"><p>Click "Render" to see the output</p></div>
 
-  get #icon() {
-    switch (this.type) {
-      case 'success': return '\u2705';
-      case 'error':   return '\u274c';
-      case 'info':    return '\u2139\ufe0f';
-      default:        return '\u2139\ufe0f';
-    }
+<script type="module">
+  import {run} from './wasi-shim.js';
+
+  const wasmModule = await WebAssembly.compileStreaming(fetch('lit-ssr-runtime.wasm'));
+
+  const componentSrc = document.getElementById('component-src');
+  const input = document.getElementById('input');
+  const output = document.getElementById('output');
+  const preview = document.getElementById('preview');
+  const timing = document.getElementById('timing');
+  const btn = document.getElementById('render-btn');
+  const template = document.getElementById('output-template');
+
+  function stripImports(source) {
+    return source.replace(/^\s*import\s+.*?from\s+['"].*?['"]\s*;?\s*$/gm, '');
   }
 
-  render() {
-    return html`<span id="icon">${this.#icon}</span><slot></slot>`;
+  function showOutput(text) {
+    const clone = template.content.cloneNode(true);
+    clone.querySelector('script[type="text/html"]').textContent = text;
+    output.replaceChildren(clone);
   }
-}
 
-customElements.define('my-alert', MyAlert);</textarea>
-      </div>
-      <div>
-        <h3>HTML to Render</h3>
-        <textarea id="input"
-                  spellcheck="false"><my-alert type="success">Deployment complete</my-alert>
-<my-alert type="error">Build failed: exit code 1</my-alert>
-<my-alert type="info">Next deploy scheduled for 3:00 PM</my-alert></textarea>
-      </div>
-    </div>
+  btn.addEventListener('click', async () => {
+    btn.setAttribute('disabled', '');
+    try {
+      const source = stripImports(componentSrc.value);
+      const defineRe = /customElements\.define\(\s*['"]([^'"]+)['"]/g;
+      const elements = [...componentSrc.value.matchAll(defineRe)].map(m => m[1]);
 
-    <button class="render" id="render-btn">Render</button>
-    <span class="timing" id="timing"></span>
+      const payload = JSON.stringify({source, html: input.value, elements});
+      const t0 = performance.now();
+      const {stdout, stderr} = await run(wasmModule, payload);
+      const ms = (performance.now() - t0).toFixed(1);
 
-    <h3>Live Preview</h3>
-    <div class="preview" id="preview"></div>
-
-    <h3>SSR Output</h3>
-    <pre id="output"><code>Click "Render" to see the output</code></pre>
-  </main>
-
-  <script type="module">
-    import { loadAndRender } from './runtime-mode.mjs';
-
-    const componentSrc = document.getElementById('component-src');
-    const input = document.getElementById('input');
-    const output = document.getElementById('output');
-    const preview = document.getElementById('preview');
-    const timing = document.getElementById('timing');
-    const btn = document.getElementById('render-btn');
-
-    function escapeHTML(s) {
-      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
-
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      btn.textContent = 'Rendering...';
-      try {
-        const t0 = performance.now();
-        const defineRe = /customElements\.define\(\s*['"]([^'"]+)['"]/g;
-        const names = [...componentSrc.value.matchAll(defineRe)].map(m => m[1]);
-        const result = await loadAndRender(componentSrc.value, input.value, names);
-        const ms = (performance.now() - t0).toFixed(1);
-        preview.innerHTML = result;
-        output.innerHTML = `<code>${escapeHTML(result)}</code>`;
-        timing.textContent = `Rendered in ${ms}ms`;
-      } catch (e) {
-        output.innerHTML = `<code style="color:red">${escapeHTML(String(e))}</code>`;
+      if (stderr) {
+        showOutput(stderr);
         timing.textContent = '';
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Render';
+        return;
       }
-    });
-  </script>
-</body>
 
-</html>
+      preview.setHTMLUnsafe(stdout);
+      showOutput(stdout);
+      timing.textContent = `Rendered in ${ms}ms`;
+    } catch (e) {
+      showOutput(e.message);
+      timing.textContent = '';
+    } finally {
+      btn.removeAttribute('disabled');
+    }
+  });
+</script>

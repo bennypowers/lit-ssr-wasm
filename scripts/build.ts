@@ -43,7 +43,6 @@ const stubNodeBuiltins: esbuild.Plugin = {
 };
 
 const common: esbuild.BuildOptions = {
-  entryPoints: ['src/entry.ts'],
   bundle: true,
   format: 'esm' as const,
   target: 'es2022',
@@ -54,19 +53,38 @@ const common: esbuild.BuildOptions = {
 };
 
 await Promise.all([
+  // Compiled mode: components baked in, reads HTML from stdin
   esbuild.build({
     ...common,
-    outfile: 'dist/lit-ssr-bundle.mjs',
+    entryPoints: ['src/entry.ts'],
+    outfile: 'dist/lit-ssr-bundle.js',
     platform: 'node',
     external: ['node:fs'],
     plugins: [aliasIO('node.ts')],
   }),
   esbuild.build({
     ...common,
-    outfile: 'dist/lit-ssr-javy.mjs',
+    entryPoints: ['src/entry.ts'],
+    outfile: 'dist/lit-ssr-javy.js',
+    platform: 'node',
+    plugins: [aliasIO('javy.ts'), stubNodeBuiltins],
+  }),
+  // Runtime mode: no components, evals JS source from JSON stdin
+  esbuild.build({
+    ...common,
+    entryPoints: ['src/runtime-entry.ts'],
+    outfile: 'dist/lit-ssr-runtime-bundle.js',
+    platform: 'node',
+    external: ['node:fs'],
+    plugins: [aliasIO('node.ts')],
+  }),
+  esbuild.build({
+    ...common,
+    entryPoints: ['src/runtime-entry.ts'],
+    outfile: 'dist/lit-ssr-runtime-javy.js',
     platform: 'node',
     plugins: [aliasIO('javy.ts'), stubNodeBuiltins],
   }),
 ]);
 
-console.log('Built: dist/lit-ssr-bundle.mjs, dist/lit-ssr-javy.mjs');
+console.log('Built: compiled + runtime bundles for Node.js and Javy');

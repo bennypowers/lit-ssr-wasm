@@ -18,11 +18,13 @@ import './components/x-tabs.js';
 import './components/x-tab.js';
 import './components/x-tab-panel.js';
 import './components/x-badge.js';
+import './components/my-alert.js';
 
 const KNOWN_ELEMENTS = new Set([
   'x-card', 'x-cta',
   'x-tabs', 'x-tab', 'x-tab-panel',
   'x-badge',
+  'my-alert',
 ]);
 
 try {

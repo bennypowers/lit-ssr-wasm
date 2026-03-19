@@ -25,13 +25,17 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Install Javy
+        run: |
+          curl -fsSL https://github.com/bytecodealliance/javy/releases/download/v8.0.0/javy-x86_64-linux-v8.0.0.gz \
+            | gunzip > /usr/local/bin/javy && chmod +x /usr/local/bin/javy
+
       - run: npm ci
       - run: npm run build
-      - run: npm run build:demo
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: _site
 
   deploy:
     needs: build

@@ -1,87 +1,61 @@
-<!doctype html>
-<html lang="en">
-
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1">
-  <title>Compiled Mode - lit-ssr-wasm</title>
-  <meta name="color-scheme"
-        content="light dark">
-  <link rel="stylesheet"
-        href="demo.css">
-</head>
-
-<body>
-  <main>
+<!-- title: Compiled Mode - lit-ssr-wasm -->
     <h2>Compiled Mode</h2>
-    <p>Component definitions are baked into the module at build time.
-      Edit the HTML below and click <strong>Render</strong> to see
-      Lit SSR inject Declarative Shadow DOM in real time.</p>
+    <p>Component definitions are baked into the WASM module at build time.
+      No JavaScript definition of <code>&lt;my-alert&gt;</code> is loaded
+      on this page. The styles you see come entirely from Declarative
+      Shadow DOM output by the WASM module.</p>
 
     <h3>Input HTML</h3>
-    <textarea id="input"
-              spellcheck="false"><x-card>
-  <h2 slot="header">Status Dashboard</h2>
-  <x-tabs>
-    <x-tab slot="tab" active>Services</x-tab>
-    <x-tab-panel>
-      <p>API Gateway <x-badge state="success">up</x-badge></p>
-      <p>Auth Service <x-badge state="warning">degraded</x-badge></p>
-      <p>Database <x-badge state="danger">down</x-badge></p>
-    </x-tab-panel>
-    <x-tab slot="tab">Metrics</x-tab>
-    <x-tab-panel>
-      <p>Uptime: 99.7% <x-badge state="info">30d</x-badge></p>
-    </x-tab-panel>
-  </x-tabs>
-  <x-cta slot="footer" variant="primary">View details</x-cta>
-</x-card></textarea>
+    <highlighted-textarea id="input" language="html">&lt;my-alert type="success"&gt;Deployment complete&lt;/my-alert&gt;
+&lt;my-alert type="error"&gt;Build failed: exit code 1&lt;/my-alert&gt;
+&lt;my-alert type="info"&gt;Next deploy scheduled for 3:00 PM&lt;/my-alert&gt;</highlighted-textarea>
 
-    <button class="render" id="render-btn">Render</button>
+    <rh-button id="render-btn">Render</rh-button>
     <span class="timing" id="timing"></span>
 
     <h3>Live Preview</h3>
     <div class="preview" id="preview"></div>
 
     <h3>SSR Output</h3>
-    <pre id="output"><code>Click "Render" to see the output</code></pre>
-
-    <details>
-      <summary>Available components</summary>
-      <ul>
-        <li><code>&lt;x-card&gt;</code> - Card with header, body, image, and footer slots</li>
-        <li><code>&lt;x-cta&gt;</code> - Call-to-action (variants: primary, secondary)</li>
-        <li><code>&lt;x-tabs&gt;</code> - Tab container</li>
-        <li><code>&lt;x-tab&gt;</code> - Tab trigger (attributes: active, disabled)</li>
-        <li><code>&lt;x-tab-panel&gt;</code> - Tab panel content</li>
-        <li><code>&lt;x-badge&gt;</code> - Status badge (states: success, warning, danger, info, neutral)</li>
-      </ul>
-    </details>
-  </main>
+    <template id="output-template">
+      <rh-code-block actions="copy wrap"
+                     highlighting="client"
+                     language="html"
+                     full-height>
+        <script type="text/html"></script>
+      </rh-code-block>
+    </template>
+    <div id="output"><p>Click "Render" to see the output</p></div>
 
   <script type="module">
-    import { render } from './compiled-mode.mjs';
+    import { run } from './wasi-shim.js';
+
+    const wasmModule = await WebAssembly.compileStreaming(fetch('lit-ssr-builtin.wasm'));
 
     const input = document.getElementById('input');
     const output = document.getElementById('output');
     const preview = document.getElementById('preview');
     const timing = document.getElementById('timing');
     const btn = document.getElementById('render-btn');
+    const template = document.getElementById('output-template');
 
-    function escapeHTML(s) {
-      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    function showOutput(text) {
+      const clone = template.content.cloneNode(true);
+      clone.querySelector('script[type="text/html"]').textContent = text;
+      output.replaceChildren(clone);
     }
 
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const t0 = performance.now();
-      const result = render(input.value);
-      const ms = (performance.now() - t0).toFixed(1);
-      preview.innerHTML = result;
-      output.innerHTML = `<code>${escapeHTML(result)}</code>`;
-      timing.textContent = `Rendered in ${ms}ms`;
+      try {
+        const { stdout } = await run(wasmModule, input.value);
+        const ms = (performance.now() - t0).toFixed(1);
+        preview.setHTMLUnsafe(stdout);
+        showOutput(stdout);
+        timing.textContent = `Rendered in ${ms}ms`;
+      } catch (e) {
+        showOutput(e.message);
+        timing.textContent = '';
+      }
     });
   </script>
-</body>
-
-</html>

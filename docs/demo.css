@@ -9,13 +9,38 @@ body {
   background: light-dark(var(--rh-color-surface-lightest), var(--rh-color-surface-darkest));
 }
 
-main {
+main, header {
   max-width: 72rem;
   margin: 0 auto;
+}
+
+main {
   padding: var(--rh-space-2xl);
 
   @media (max-width: 40rem) {
     padding: var(--rh-space-lg);
+  }
+}
+
+header, h1 {
+  display: flex;
+  flex-flow: row wrap;
+  gap: var(--rh-space-md);
+}
+
+header {
+  h1 { margin-inline-end: auto; }
+  rh-tag, img, > a {
+    display: inline;
+    align-self: center;
+  }
+  > a {
+    display: block;
+    height: 20px;
+    color: currentcolor;
+  }
+  rh-subnav {
+    width: 100%;
   }
 }
 
@@ -101,24 +126,8 @@ details {
   }
 }
 
-textarea {
-  width: 100%;
+highlighted-textarea {
   min-height: 16rem;
-  font-family: var(--rh-font-family-code);
-  font-size: var(--rh-font-size-code-sm);
-  line-height: var(--rh-line-height-code);
-  padding: var(--rh-space-lg);
-  border: var(--rh-border-width-sm) solid light-dark(var(--rh-color-border-subtle-on-light), var(--rh-color-border-subtle-on-dark));
-  border-radius: var(--rh-border-radius-default);
-  background: light-dark(var(--rh-color-surface-lighter), var(--rh-color-surface-darker));
-  color: light-dark(var(--rh-color-text-primary-on-light), var(--rh-color-text-primary-on-dark));
-  resize: vertical;
-  tab-size: 2;
-}
-
-textarea:focus-visible {
-  outline: var(--rh-border-width-md) solid light-dark(var(--rh-color-interactive-primary-default-on-light), var(--rh-color-interactive-primary-default-on-dark));
-  outline-offset: var(--rh-border-width-sm);
 }
 
 pre {
@@ -136,32 +145,6 @@ pre {
 
 code {
   font-family: var(--rh-font-family-code);
-}
-
-button.render {
-  padding: var(--rh-space-md) var(--rh-space-2xl);
-  border: none;
-  border-radius: var(--rh-border-radius-default);
-  background: light-dark(var(--rh-color-brand-red-on-light), var(--rh-color-brand-red-on-dark));
-  color: light-dark(var(--rh-color-text-primary-on-dark), var(--rh-color-text-primary-on-light));
-  font: inherit;
-  font-weight: var(--rh-font-weight-heading-bold);
-  cursor: pointer;
-  margin-block: var(--rh-space-lg);
-
-  &:hover {
-    filter: brightness(1.1);
-  }
-
-  &:focus-visible {
-    outline: var(--rh-border-width-md) solid light-dark(var(--rh-color-interactive-primary-default-on-light), var(--rh-color-interactive-primary-default-on-dark));
-    outline-offset: var(--rh-border-width-sm);
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
 }
 
 .preview {

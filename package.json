@@ -4,20 +4,81 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node --import tsx/esm scripts/build.ts",
-    "build:wasm": "npm run build && javy build -J javy-stream-io=y -J text-encoding=y dist/lit-ssr-javy.mjs -o dist/lit-ssr.wasm",
-    "build:demo": "node --import tsx/esm scripts/build-demo.ts",
-    "test": "node --import tsx/esm --test src/**/*.test.ts",
-    "clean": "rm -rf dist"
+    "build": "wireit",
+    "build:js": "wireit",
+    "build:wasm": "wireit",
+    "build:demo": "wireit",
+    "start": "wireit",
+    "test": "node --test src/**/*.test.ts",
+    "clean": "rm -rf dist _site"
+  },
+  "wireit": {
+    "build": {
+      "dependencies": [
+        "build:wasm",
+        "build:demo"
+      ]
+    },
+    "build:js": {
+      "command": "node scripts/build.ts",
+      "files": [
+        "src/**/*.ts",
+        "scripts/build.ts"
+      ],
+      "output": [
+        "dist/lit-ssr-bundle.js",
+        "dist/lit-ssr-javy.js",
+        "dist/lit-ssr-runtime-bundle.js",
+        "dist/lit-ssr-runtime-javy.js"
+      ]
+    },
+    "build:wasm": {
+      "command": "javy build -J javy-stream-io=y -J text-encoding=y dist/lit-ssr-runtime-javy.js -o dist/lit-ssr-runtime.wasm && javy build -J javy-stream-io=y -J text-encoding=y dist/lit-ssr-javy.js -o dist/lit-ssr-builtin.wasm",
+      "dependencies": [
+        "build:js"
+      ],
+      "files": [],
+      "output": [
+        "dist/lit-ssr-runtime.wasm",
+        "dist/lit-ssr-builtin.wasm"
+      ]
+    },
+    "start": {
+      "command": "node scripts/dev-server.ts",
+      "dependencies": [
+        "build"
+      ],
+      "service": true
+    },
+    "build:demo": {
+      "command": "node scripts/build-demo.ts",
+      "dependencies": [
+        "build:wasm"
+      ],
+      "files": [
+        "docs/**",
+        "scripts/build-demo.ts",
+        "src/ssr-rhds.ts",
+        "src/harness/**",
+        "src/components/my-alert.ts"
+      ],
+      "output": [
+        "_site/**"
+      ]
+    }
   },
   "dependencies": {
     "@lit-labs/ssr": "^4.0.0",
     "lit": "^3.3.0"
   },
   "devDependencies": {
+    "@lit/ts-transformers": "^2.0.2",
     "@rhds/elements": "^4.0.4",
     "@rhds/tokens": "^3.0.2",
+    "@types/node": "^24.12.0",
     "esbuild": "^0.27.0",
-    "tsx": "^4.19.0"
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3",
+    "wireit": "^0.14.12"
   }
 }

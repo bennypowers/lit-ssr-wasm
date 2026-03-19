@@ -1,16 +1,15 @@
 /**
- * Entry point for the Lit SSR WASM module.
+ * Entry point for the Lit SSR WASM module (builtin/compiled mode).
  *
- * Imports component definitions, reads HTML from stdin, renders all
- * known custom elements with Declarative Shadow DOM, and writes the
- * result to stdout.
- *
- * The build script swaps the I/O module depending on the target
- * platform (Javy WASM vs Node.js).
+ * Component definitions are baked in. Read loop:
+ *   request (stdin):  raw HTML, NUL-terminated
+ *   response (stdout): rendered HTML, NUL-terminated
+ *   errors go to stderr
+ * Exits cleanly at EOF.
  */
 
 import { processHTML } from './harness/render.js';
-import { readStdin, writeStdout, writeStderr } from './io.js';
+import { readUntilNul, writeStdout, writeStderr } from './io.js';
 
 import './components/x-card.js';
 import './components/x-cta.js';
@@ -27,11 +26,16 @@ const KNOWN_ELEMENTS = new Set([
   'my-alert',
 ]);
 
-try {
-  const input = readStdin();
-  const output = processHTML(input, KNOWN_ELEMENTS);
-  writeStdout(output);
-} catch (e: unknown) {
-  const msg = e instanceof Error ? `${e.message}\n${e.stack}` : String(e);
-  writeStderr(`lit-ssr-wasm error: ${msg}\n`);
+for (;;) {
+  const input = readUntilNul();
+  if (input === null) break;
+
+  try {
+    const output = processHTML(input, KNOWN_ELEMENTS);
+    writeStdout(output + '\0');
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    writeStderr(msg + '\n');
+    writeStdout('\0');
+  }
 }

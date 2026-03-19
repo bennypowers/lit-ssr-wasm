@@ -1,16 +1,15 @@
 /**
- * Runtime mode entry point for the Lit SSR WASM module.
+ * Entry point for the Lit SSR WASM module (runtime mode).
  *
- * No component definitions are baked in. Instead, reads JSON from stdin:
- *   { "source": "...", "html": "...", "elements": ["my-alert"] }
- *
- * The source is eval'd in QuickJS, which registers custom elements
- * via customElements.define(). Lit APIs are exposed as globals so
- * eval'd code can reference them without import statements.
+ * No component definitions baked in. Read loop:
+ *   request (stdin):  JSON line {"source":"...","html":"...","elements":[...]}\n
+ *   response (stdout): rendered HTML, NUL-terminated
+ *   errors go to stderr
+ * Exits cleanly at EOF.
  */
 
 import { processHTML } from './harness/render.js';
-import { readStdin, writeStdout, writeStderr } from './io.js';
+import { readLine, writeStdout, writeStderr } from './io.js';
 
 import { LitElement, html, css, nothing, noChange } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
@@ -18,27 +17,31 @@ import { styleMap } from 'lit/directives/style-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 
-// Expose lit APIs as globals so eval'd component source can use them.
 Object.assign(globalThis, {
   LitElement, html, css, nothing, noChange,
   classMap, styleMap, repeat, unsafeHTML,
 });
 
-try {
-  const input = JSON.parse(readStdin()) as {
-    source: string;
-    html: string;
-    elements: string[];
-  };
+for (;;) {
+  const line = readLine();
+  if (line === null) break;
+  if (line.trim() === '') continue;
 
-  // Eval the component source. This runs in QuickJS and registers
-  // custom elements via customElements.define().
-  (0, eval)(input.source);
+  try {
+    const req = JSON.parse(line) as {
+      source: string;
+      html: string;
+      elements: string[];
+    };
 
-  const known = new Set(input.elements);
-  const output = processHTML(input.html, known);
-  writeStdout(output);
-} catch (e: unknown) {
-  const msg = e instanceof Error ? `${e.message}\n${e.stack}` : String(e);
-  writeStderr(`lit-ssr-wasm runtime error: ${msg}\n`);
+    (0, eval)(req.source);
+
+    const known = new Set(req.elements);
+    const output = processHTML(req.html, known);
+    writeStdout(output + '\0');
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    writeStderr(msg + '\n');
+    writeStdout('\0');
+  }
 }

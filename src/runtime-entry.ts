@@ -34,9 +34,15 @@ for (;;) {
       elements: string[];
     };
 
-    (0, eval)(req.source);
-
+    // Only eval source if it contains elements we haven't registered yet.
+    // QuickJS keeps state across the read loop, so once components are
+    // defined they stay registered for all subsequent renders.
     const known = new Set(req.elements);
+    const needsEval = req.elements.some(name => !customElements.get(name));
+    if (needsEval && req.source) {
+      (0, eval)(req.source);
+    }
+
     const output = processHTML(req.html, known);
     writeStdout(output + '\0');
   } catch (e: unknown) {

@@ -38,11 +38,11 @@ import (
 //go:embed lit-ssr-runtime.wasm
 var runtimeWasm []byte
 
-// Matches both direct define calls and Lit's @customElement decorator:
-//   customElements.define('my-el', ...)
-//   customElement("my-el")
-//   [customElement("my-el")]
-var defineRe = regexp.MustCompile(`(?:customElements\.define|customElement)\(\s*['"]([^'"]+)['"]`)
+// Matches customElements.define('my-el', ...) calls. This is a property
+// access on a global, so it survives minification. The @customElement
+// decorator is NOT matched because minifiers rename the imported symbol.
+// Use NewWithElements for decorator-based or minified bundles.
+var defineRe = regexp.MustCompile(`customElements\.define\(\s*['"]([^'"]+)['"]`)
 
 // initRequest is sent once per worker to load component source.
 type initRequest struct {
@@ -103,14 +103,15 @@ type Renderer struct {
 
 // New creates a renderer pool with the given concurrency.
 // componentSource is bundled JavaScript containing component
-// definitions (custom element registrations such as customElements.define
-// or Lit's @customElement decorator). Element tag names are extracted
-// automatically via regex.
+// definitions. Element tag names are extracted automatically by
+// matching customElements.define('tag-name', ...) calls via regex.
+// For minified bundles or decorator-based registration, use
+// NewWithElements instead.
 // If workers is 0, defaults to runtime.NumCPU().
 func New(ctx context.Context, componentSource string, workers int) (*Renderer, error) {
 	elements := extractElements(componentSource)
 	if len(elements) == 0 {
-		return nil, fmt.Errorf("litssr: no custom element registrations found in component source")
+		return nil, fmt.Errorf("litssr: no customElements.define() calls found in source; use NewWithElements for decorator-based or minified bundles")
 	}
 	return NewWithElements(ctx, componentSource, elements, workers)
 }
@@ -161,8 +162,8 @@ func NewWithElements(ctx context.Context, componentSource string, elements []str
 	return r, nil
 }
 
-// extractElements finds element tag names via defineRe
-// (customElements.define and customElement calls).
+// extractElements finds element tag names by matching
+// customElements.define('tag-name', ...) calls in the source.
 func extractElements(source string) []string {
 	matches := defineRe.FindAllStringSubmatch(source, -1)
 	seen := make(map[string]struct{}, len(matches))

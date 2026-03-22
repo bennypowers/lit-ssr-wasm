@@ -50,7 +50,6 @@ type initRequest struct {
 	Elements []string `json:"elements"`
 }
 
-
 // request is sent to a worker via its channel.
 type request struct {
 	html string

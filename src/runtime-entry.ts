@@ -206,7 +206,7 @@ try {
   writeStdout('\0'); // ack
 } catch (e: unknown) {
   const msg = e instanceof Error ? e.message : String(e);
-  writeStderr(msg);
+  writeStderr(msg + '\n');
   writeStdout('\0');
   throw e;
 }

@@ -31,7 +31,7 @@ const common: esbuild.BuildOptions = {
 };
 
 await Promise.all([
-  // Runtime mode: no components, evals JS source from JSON stdin
+  // Runtime mode: two-phase protocol (JSON init, then NUL-delimited HTML renders)
   esbuild.build({
     ...common,
     entryPoints: ['src/runtime-entry.ts'],

@@ -58,6 +58,7 @@ func main() {
 	defer renderer.Close(ctx)
 
 	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024) // up to 10MB
 	scanner.Split(splitNul)
 
 	for scanner.Scan() {
@@ -94,8 +95,12 @@ func loadSource(bundle, dir string, components []string) (string, error) {
 
 	var jsFiles []string
 	if dir != "" {
-		if _, err := os.Stat(dir); err != nil {
+		info, err := os.Stat(dir)
+		if err != nil {
 			return "", fmt.Errorf("dir %s: %w", dir, err)
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("%s is not a directory", dir)
 		}
 		matches, err := filepath.Glob(filepath.Join(dir, "*.js"))
 		if err != nil {

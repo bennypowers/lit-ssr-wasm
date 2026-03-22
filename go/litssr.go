@@ -28,6 +28,7 @@ import (
 	"io"
 	"regexp"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/tetratelabs/wazero"
@@ -231,7 +232,7 @@ func (w *worker) init(source string, elements []string) error {
 	}
 	_ = ack
 
-	if errMsg := w.stderr.drain(); errMsg != "" {
+	if errMsg := strings.TrimSpace(w.stderr.drain()); errMsg != "" {
 		return fmt.Errorf("litssr: init: %s", errMsg)
 	}
 
@@ -260,7 +261,7 @@ func (w *worker) render(inputHTML string) (string, error) {
 	// Strip the trailing NUL
 	result = result[:len(result)-1]
 
-	if errMsg := w.stderr.drain(); errMsg != "" {
+	if errMsg := strings.TrimSpace(w.stderr.drain()); errMsg != "" {
 		if result == "" {
 			return "", fmt.Errorf("litssr: %s", errMsg)
 		}

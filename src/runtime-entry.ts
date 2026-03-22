@@ -166,12 +166,18 @@ Object.assign(globalThis, {
     isBuffer() { return false; },
     alloc(n: number) { return new Uint8Array(n); },
   },
-  // Minimal Document shim needed by Lit's supportsAdoptingStyleSheets check
+  // Minimal Document shim for Lit's import-time initialization.
   Document: class Document {
     get adoptedStyleSheets() { return []; }
-    createTreeWalker() { return {}; }
-    createTextNode() { return {}; }
-    createElement() { return {}; }
+    createTreeWalker() {
+      return { currentNode: null as unknown, nextNode() { return null; } };
+    }
+    createTextNode(data = '') { return { nodeType: 3, data, textContent: data }; }
+    createComment(data = '') { return { nodeType: 8, data }; }
+    createElement(tag: string) {
+      if (tag.toLowerCase() === 'template') return { tagName: 'TEMPLATE', content: {} };
+      return { tagName: tag.toUpperCase() };
+    }
   },
   ShadowRoot: class ShadowRoot {},
   MutationObserver: class MutationObserver { observe() {} },
@@ -200,7 +206,7 @@ try {
   writeStdout('\0'); // ack
 } catch (e: unknown) {
   const msg = e instanceof Error ? e.message : String(e);
-  writeStderr('init: ' + msg + '\n');
+  writeStderr(msg);
   writeStdout('\0');
   throw e;
 }

@@ -38,7 +38,10 @@ try {
 for (;;) {
   const html = readUntilNul();
   if (html === null) break;
-  if (html.trim() === '') continue;
+  if (html.trim() === '') {
+    writeStdout('\0');
+    continue;
+  }
 
   try {
     const output = processHTML(html, known);

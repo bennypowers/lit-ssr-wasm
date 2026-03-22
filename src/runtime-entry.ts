@@ -1,11 +1,10 @@
 /**
  * Entry point for the Lit SSR WASM module (runtime mode).
  *
- * No component definitions baked in. Read loop:
- *   request (stdin):  JSON line {"source":"...","html":"...","elements":[...]}\n
- *   response (stdout): rendered HTML, NUL-terminated
- *   errors go to stderr
- * Exits cleanly at EOF.
+ * Two-phase protocol:
+ *   1. Init:   JSON line {"source":"...","elements":[...]}\n -> ack \0
+ *   2. Render: NUL-terminated HTML -> NUL-terminated rendered HTML
+ * Errors go to stderr. Exits cleanly at EOF.
  */
 
 // -- SSR environment shims (must run before any Lit imports) --

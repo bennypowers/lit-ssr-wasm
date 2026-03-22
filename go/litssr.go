@@ -191,7 +191,10 @@ func (r *Renderer) startWorker(ctx context.Context, source string, elements []st
 
 	go func() {
 		_, err := r.runtime.InstantiateModule(ctx, r.compiled, cfg)
-		_ = err // Module exits when stdin is closed (EOF)
+		if err != nil {
+			// Close stdin so w.init() gets an error instead of blocking.
+			stdinR.CloseWithError(err)
+		}
 		stdoutW.Close()
 	}()
 

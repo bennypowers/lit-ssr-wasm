@@ -144,6 +144,26 @@ Object.assign(globalThis, {
   URL: URLShim,
   URLSearchParams: URLSearchParamsShim,
   CSS: CSSShim,
+  // Buffer shim: Lit internals (e.g. @lit-labs/ssr-client digest computation)
+  // reference Buffer globally. The binary/base64 path delegates to btoa.
+  Buffer: {
+    from(x: unknown, encoding?: string) {
+      if (typeof x === 'string') {
+        if (encoding === 'binary') {
+          return {
+            toString(enc?: string) {
+              if (enc === 'base64') return btoa(x);
+              return x;
+            },
+          };
+        }
+        return new TextEncoder().encode(x);
+      }
+      return new Uint8Array(x as ArrayBuffer);
+    },
+    isBuffer() { return false; },
+    alloc(n: number) { return new Uint8Array(n); },
+  },
   // Minimal Document shim needed by Lit's supportsAdoptingStyleSheets check
   Document: class Document {
     get adoptedStyleSheets() { return []; }

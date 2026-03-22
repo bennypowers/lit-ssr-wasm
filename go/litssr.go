@@ -43,12 +43,12 @@ var runtimeWasm []byte
 //   [customElement("my-el")]
 var defineRe = regexp.MustCompile(`(?:customElements\.define|customElement)\(\s*['"]([^'"]+)['"]`)
 
-// runtimeRequest is the JSON payload sent to the runtime WASM module.
-type runtimeRequest struct {
+// initRequest is sent once per worker to load component source.
+type initRequest struct {
 	Source   string   `json:"source"`
-	HTML     string   `json:"html"`
 	Elements []string `json:"elements"`
 }
+
 
 // request is sent to a worker via its channel.
 type request struct {
@@ -95,8 +95,6 @@ func (s *stderrCollector) drain() string {
 type Renderer struct {
 	runtime  wazero.Runtime
 	compiled wazero.CompiledModule
-	source   string
-	elements []string
 	workers  []*worker
 	work     chan request
 	wg       sync.WaitGroup
@@ -145,13 +143,11 @@ func NewWithElements(ctx context.Context, componentSource string, elements []str
 	r := &Renderer{
 		runtime:  rt,
 		compiled: compiled,
-		source:   componentSource,
-		elements: elements,
 		work:     make(chan request),
 	}
 
 	for i := range workers {
-		w, err := r.startWorker(ctx, i)
+		w, err := r.startWorker(ctx, componentSource, elements, i)
 		if err != nil {
 			r.Close(ctx)
 			return nil, fmt.Errorf("litssr: start worker %d: %w", i, err)
@@ -181,7 +177,7 @@ func extractElements(source string) []string {
 	return elements
 }
 
-func (r *Renderer) startWorker(ctx context.Context, _ int) (*worker, error) {
+func (r *Renderer) startWorker(ctx context.Context, source string, elements []string, _ int) (*worker, error) {
 	stdinR, stdinW := io.Pipe()
 	stdoutR, stdoutW := io.Pipe()
 	stderr := &stderrCollector{}
@@ -198,34 +194,61 @@ func (r *Renderer) startWorker(ctx context.Context, _ int) (*worker, error) {
 		stdoutW.Close()
 	}()
 
-	return &worker{
+	w := &worker{
 		stdin:  stdinW,
 		stdout: bufio.NewReader(stdoutR),
 		stderr: stderr,
-	}, nil
+	}
+
+	// Send init message with source + elements once per worker.
+	if err := w.init(source, elements); err != nil {
+		stdinW.Close()
+		return nil, err
+	}
+
+	return w, nil
+}
+
+// init sends the component source and element list to the WASM worker.
+// Called once per worker at startup. The WASM evals the source, registers
+// custom elements, and acks with \0.
+func (w *worker) init(source string, elements []string) error {
+	req := initRequest{Source: source, Elements: elements}
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("litssr: marshal init: %w", err)
+	}
+	payload = append(payload, '\n')
+
+	if _, err := w.stdin.Write(payload); err != nil {
+		return fmt.Errorf("litssr: write init: %w", err)
+	}
+
+	// Wait for ack
+	ack, err := w.stdout.ReadString('\x00')
+	if err != nil {
+		return fmt.Errorf("litssr: read init ack: %w", err)
+	}
+	_ = ack
+
+	if errMsg := w.stderr.drain(); errMsg != "" {
+		return fmt.Errorf("litssr: init: %s", errMsg)
+	}
+
+	return nil
 }
 
 func (r *Renderer) runWorker(w *worker) {
 	defer r.wg.Done()
 	for req := range r.work {
-		html, err := w.render(r.source, r.elements, req.html)
+		html, err := w.render(req.html)
 		req.resp <- response{html: html, err: err}
 	}
 }
 
-func (w *worker) render(source string, elements []string, inputHTML string) (string, error) {
-	req := runtimeRequest{
-		Source:   source,
-		HTML:     inputHTML,
-		Elements: elements,
-	}
-	payload, err := json.Marshal(req)
-	if err != nil {
-		return "", fmt.Errorf("litssr: marshal request: %w", err)
-	}
-	payload = append(payload, '\n')
-
-	if _, err := w.stdin.Write(payload); err != nil {
+func (w *worker) render(inputHTML string) (string, error) {
+	// Send raw HTML terminated by newline (no JSON wrapping needed).
+	if _, err := io.WriteString(w.stdin, inputHTML+"\n"); err != nil {
 		return "", fmt.Errorf("litssr: write to worker: %w", err)
 	}
 

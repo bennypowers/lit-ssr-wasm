@@ -181,28 +181,38 @@ Object.assign(globalThis, {
 // @ts-expect-error -- minimal Document instance for Lit
 globalThis.document = new globalThis.Document();
 
+// Two-phase protocol:
+//   1. Init: JSON line {"source":"...","elements":[...]} -> eval, ack \0
+//   2. Render: raw HTML line -> rendered HTML + \0
+// Source is sent once at init, not on every render.
+
+// Phase 1: read init message
+const initLine = readLine();
+if (initLine === null) throw new Error('unexpected EOF before init');
+
+let known: Set<string>;
+try {
+  const init = JSON.parse(initLine) as { source: string; elements: string[] };
+  known = new Set(init.elements);
+  if (init.source) {
+    (0, eval)(init.source);
+  }
+  writeStdout('\0'); // ack
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : String(e);
+  writeStderr('init: ' + msg + '\n');
+  writeStdout('\0');
+  throw e;
+}
+
+// Phase 2: render loop -- raw HTML lines in, NUL-terminated HTML out
 for (;;) {
-  const line = readLine();
-  if (line === null) break;
-  if (line.trim() === '') continue;
+  const html = readLine();
+  if (html === null) break;
+  if (html.trim() === '') continue;
 
   try {
-    const req = JSON.parse(line) as {
-      source: string;
-      html: string;
-      elements: string[];
-    };
-
-    // Only eval source if it contains elements we haven't registered yet.
-    // QuickJS keeps state across the read loop, so once components are
-    // defined they stay registered for all subsequent renders.
-    const known = new Set(req.elements);
-    const needsEval = req.elements.some(name => !customElements.get(name));
-    if (needsEval && req.source) {
-      (0, eval)(req.source);
-    }
-
-    const output = processHTML(req.html, known);
+    const output = processHTML(html, known);
     writeStdout(output + '\0');
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

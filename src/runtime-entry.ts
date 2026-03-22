@@ -85,8 +85,10 @@ class URLSearchParamsShim {
     if (init?.startsWith('?')) init = init.slice(1);
     if (init) {
       for (const pair of init.split('&')) {
-        const [k, v] = pair.split('=');
-        this._entries.push([decodeURIComponent(k), decodeURIComponent(v ?? '')]);
+        const eq = pair.indexOf('=');
+        const k = eq < 0 ? pair : pair.slice(0, eq);
+        const v = eq < 0 ? '' : pair.slice(eq + 1);
+        this._entries.push([decodeURIComponent(k), decodeURIComponent(v)]);
       }
     }
   }

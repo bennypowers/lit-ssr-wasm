@@ -47,7 +47,7 @@ content on first paint with zero layout shift.
 
 - [Node.js][nodejs] >= 22
 - [Javy][javy] >= 8.0
-- [Go][golang] >= 1.21 (for the Go library)
+- [Go][golang] >= 1.25 (for the Go library)
 
 ### Install and Build
 

@@ -168,9 +168,15 @@ func NewWithElements(ctx context.Context, componentSource string, elements []str
 // (customElements.define and customElement calls).
 func extractElements(source string) []string {
 	matches := defineRe.FindAllStringSubmatch(source, -1)
+	seen := make(map[string]struct{}, len(matches))
 	elements := make([]string, 0, len(matches))
 	for _, m := range matches {
-		elements = append(elements, m[1])
+		tag := m[1]
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		elements = append(elements, tag)
 	}
 	return elements
 }

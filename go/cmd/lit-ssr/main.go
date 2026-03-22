@@ -91,9 +91,15 @@ func loadSource(bundle, dir string, components []string) (string, error) {
 
 	var jsFiles []string
 	if dir != "" {
+		if _, err := os.Stat(dir); err != nil {
+			return "", fmt.Errorf("dir %s: %w", dir, err)
+		}
 		matches, err := filepath.Glob(filepath.Join(dir, "*.js"))
 		if err != nil {
 			return "", fmt.Errorf("glob error: %w", err)
+		}
+		if len(matches) == 0 {
+			return "", fmt.Errorf("no .js files found in %s", dir)
 		}
 		jsFiles = append(jsFiles, matches...)
 	}

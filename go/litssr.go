@@ -247,8 +247,8 @@ func (r *Renderer) runWorker(w *worker) {
 }
 
 func (w *worker) render(inputHTML string) (string, error) {
-	// Send raw HTML terminated by newline (no JSON wrapping needed).
-	if _, err := io.WriteString(w.stdin, inputHTML+"\n"); err != nil {
+	// Send raw HTML terminated by NUL (supports multi-line HTML).
+	if _, err := io.WriteString(w.stdin, inputHTML+"\x00"); err != nil {
 		return "", fmt.Errorf("litssr: write to worker: %w", err)
 	}
 

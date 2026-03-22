@@ -110,7 +110,7 @@ const CSSShim = {
 };
 
 import { processHTML } from './harness/render.js';
-import { readLine, writeStdout, writeStderr } from './io.js';
+import { readLine, readUntilNul, writeStdout, writeStderr } from './io.js';
 
 // Install SSR DOM shims as globals. Consumer bundles bring their own
 // Lit copy which references these via the litSsrWasmPlugin esbuild
@@ -205,9 +205,10 @@ try {
   throw e;
 }
 
-// Phase 2: render loop -- raw HTML lines in, NUL-terminated HTML out
+// Phase 2: render loop -- NUL-terminated HTML in, NUL-terminated HTML out.
+// Uses NUL delimiter (not newline) so multi-line HTML is handled correctly.
 for (;;) {
-  const html = readLine();
+  const html = readUntilNul();
   if (html === null) break;
   if (html.trim() === '') continue;
 

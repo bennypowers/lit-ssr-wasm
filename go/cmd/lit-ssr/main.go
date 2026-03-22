@@ -82,6 +82,9 @@ func main() {
 
 func loadSource(bundle, dir string, components []string) (string, error) {
 	if bundle != "" {
+		if dir != "" || len(components) > 0 {
+			return "", fmt.Errorf("--bundle is mutually exclusive with --dir and --components")
+		}
 		data, err := os.ReadFile(bundle)
 		if err != nil {
 			return "", fmt.Errorf("read bundle %s: %w", bundle, err)

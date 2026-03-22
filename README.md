@@ -213,20 +213,30 @@ The WASM module sets up these globals before evaluating consumer code:
 
 ## Wire Protocol
 
-The WASM module uses a read-loop protocol that keeps instances warm across
+The WASM module uses a two-phase protocol that keeps instances warm across
 multiple renders, amortizing the ~350ms cold start.
 
-JSON line in, NUL-delimited HTML out:
+### Phase 1: Init (once per worker)
 
 ```
-stdin:  {"source":"...","html":"...","elements":[...]}\n
+stdin:  {"source":"...","elements":["my-el","my-other"]}\n
+stdout: \0  (ack)
+```
+
+The WASM evaluates the component source and registers custom elements.
+
+### Phase 2: Render (per request)
+
+```
+stdin:  <raw HTML>\0
 stdout: <rendered HTML>\0
 ```
 
-Errors are written to stderr. On error, stdout gets an empty response (`\0`).
+NUL-delimited on both sides so multi-line HTML is handled correctly.
+Errors are written to stderr; on error, stdout gets an empty response (`\0`).
 The module exits cleanly when stdin reaches EOF.
 
-The Go library and CLI handle the JSON protocol internally. External callers
+The Go library and CLI handle this protocol internally. External callers
 use NUL-delimited HTML on both sides (the CLI translates).
 
 ---

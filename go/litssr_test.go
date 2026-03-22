@@ -2,15 +2,20 @@ package litssr
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
-	"strings"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 )
 
+//go:embed testdata/test-components.js
+var testSource string
+
 func newRenderer(t *testing.T) *Renderer {
 	t.Helper()
-	r, err := New(context.Background(), 2)
+	r, err := New(context.Background(), testSource, 2)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -18,97 +23,95 @@ func newRenderer(t *testing.T) *Renderer {
 	return r
 }
 
-func TestCard(t *testing.T) {
-	r := newRenderer(t)
-	out, err := r.RenderHTML(context.Background(), `<x-card><h2 slot="header">Hi</h2><p>Body</p></x-card>`)
+func golden(t *testing.T, name string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", name+".golden"))
 	if err != nil {
-		t.Fatalf("RenderHTML: %v", err)
+		t.Fatalf("read golden %s: %v", name, err)
 	}
-	t.Log(out)
-	for _, want := range []string{`shadowrootmode="open"`, "x-card", "<slot", "Body"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("missing %q in output", want)
+	return string(data)
+}
+
+func TestExtractElements(t *testing.T) {
+	elements := extractElements(testSource)
+	want := []string{"test-card", "test-badge", "test-sheet"}
+	if len(elements) != len(want) {
+		t.Fatalf("got %d elements, want %d", len(elements), len(want))
+	}
+	for i, e := range elements {
+		if e != want[i] {
+			t.Errorf("element %d: got %q, want %q", i, e, want[i])
 		}
 	}
 }
 
-func TestNestedCardCTA(t *testing.T) {
-	r := newRenderer(t)
-	in := `<x-card><p>Hi</p><x-cta slot="footer" variant="primary">Go</x-cta></x-card>`
-	out, err := r.RenderHTML(context.Background(), in)
-	if err != nil {
-		t.Fatalf("RenderHTML: %v", err)
-	}
-	t.Log(out)
-	if n := strings.Count(out, `shadowrootmode="open"`); n < 2 {
-		t.Errorf("expected >= 2 DSD templates, got %d", n)
+func TestNoDefines(t *testing.T) {
+	_, err := New(context.Background(), "// no components here", 1)
+	if err == nil {
+		t.Fatal("expected error for source with no customElements.define calls")
 	}
 }
 
-func TestTabs(t *testing.T) {
+func TestCard(t *testing.T) {
 	r := newRenderer(t)
-	in := `<x-tabs>
-  <x-tab slot="tab" active>A</x-tab>
-  <x-tab-panel>Panel A</x-tab-panel>
-  <x-tab slot="tab">B</x-tab>
-  <x-tab-panel>Panel B</x-tab-panel>
-</x-tabs>`
-	out, err := r.RenderHTML(context.Background(), in)
+	want := golden(t, "card")
+	got, err := r.RenderHTML(context.Background(), `<test-card><h2 slot="header">Hi</h2><p>Body</p></test-card>`)
 	if err != nil {
 		t.Fatalf("RenderHTML: %v", err)
 	}
-	t.Log(out)
-	if n := strings.Count(out, `shadowrootmode="open"`); n < 5 {
-		t.Errorf("expected >= 5 DSD templates, got %d", n)
+	if got != want {
+		t.Errorf("mismatch\ngot:\n%s\nwant:\n%s", got, want)
 	}
-	if !strings.Contains(out, `role="tablist"`) {
-		t.Error("missing tablist role")
+}
+
+func TestBadge(t *testing.T) {
+	r := newRenderer(t)
+	want := golden(t, "badge")
+	got, err := r.RenderHTML(context.Background(), `<test-badge state="success">up</test-badge>`)
+	if err != nil {
+		t.Fatalf("RenderHTML: %v", err)
+	}
+	if got != want {
+		t.Errorf("mismatch\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestCSSStyleSheet(t *testing.T) {
+	r := newRenderer(t)
+	want := golden(t, "sheet")
+	got, err := r.RenderHTML(context.Background(), `<test-sheet>styled</test-sheet>`)
+	if err != nil {
+		t.Fatalf("RenderHTML: %v", err)
+	}
+	if got != want {
+		t.Errorf("mismatch\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
 func TestPassthrough(t *testing.T) {
 	r := newRenderer(t)
-	in := `<unknown-el>hello</unknown-el>`
-	out, err := r.RenderHTML(context.Background(), in)
+	want := golden(t, "passthrough")
+	got, err := r.RenderHTML(context.Background(), `<unknown-el>hello</unknown-el>`)
 	if err != nil {
 		t.Fatalf("RenderHTML: %v", err)
 	}
-	if out != in {
-		t.Errorf("unknown elements should pass through unchanged\ngot:  %s\nwant: %s", out, in)
-	}
-}
-
-func TestMixed(t *testing.T) {
-	r := newRenderer(t)
-	in := `<x-card>
-  <h2 slot="header">Dashboard</h2>
-  <x-tabs>
-    <x-tab slot="tab" active>Status</x-tab>
-    <x-tab-panel><p>OK <x-badge state="success">up</x-badge></p></x-tab-panel>
-  </x-tabs>
-</x-card>`
-	out, err := r.RenderHTML(context.Background(), in)
-	if err != nil {
-		t.Fatalf("RenderHTML: %v", err)
-	}
-	t.Log(out)
-	if n := strings.Count(out, `shadowrootmode="open"`); n < 5 {
-		t.Errorf("expected >= 5 DSD templates, got %d", n)
+	if got != want {
+		t.Errorf("mismatch\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
 func TestMultipleRenders(t *testing.T) {
 	r := newRenderer(t)
 	ctx := context.Background()
+	want := golden(t, "card")
 
-	// Same instance handles multiple sequential renders
 	for i := range 5 {
-		out, err := r.RenderHTML(ctx, `<x-card><p>render</p></x-card>`)
+		got, err := r.RenderHTML(ctx, `<test-card><h2 slot="header">Hi</h2><p>Body</p></test-card>`)
 		if err != nil {
 			t.Fatalf("render %d: %v", i, err)
 		}
-		if !strings.Contains(out, `shadowrootmode="open"`) {
-			t.Errorf("render %d: missing DSD", i)
+		if got != want {
+			t.Errorf("render %d: mismatch\ngot:\n%s\nwant:\n%s", i, got, want)
 		}
 	}
 }
@@ -116,17 +119,12 @@ func TestMultipleRenders(t *testing.T) {
 func TestBatch(t *testing.T) {
 	r := newRenderer(t)
 	inputs := []string{
-		`<x-card><p>One</p></x-card>`,
-		`<x-badge state="success">up</x-badge>`,
-		`<x-cta variant="primary">Click</x-cta>`,
-		`<x-card><p>Two</p></x-card>`,
-		`<x-badge state="danger">down</x-badge>`,
-		`<unknown-el>pass</unknown-el>`,
-		`<x-card><p>Three</p></x-card>`,
-		`<x-badge state="info">info</x-badge>`,
-		`<x-card><p>Four</p></x-card>`,
-		`<x-card><p>Five</p></x-card>`,
+		`<test-card><h2 slot="header">Hi</h2><p>Body</p></test-card>`,
+		`<test-badge state="success">up</test-badge>`,
+		`<test-sheet>styled</test-sheet>`,
+		`<unknown-el>hello</unknown-el>`,
 	}
+	goldens := []string{"card", "badge", "sheet", "passthrough"}
 
 	results, err := r.RenderBatch(context.Background(), inputs)
 	if err != nil {
@@ -137,16 +135,10 @@ func TestBatch(t *testing.T) {
 		t.Fatalf("got %d results, want %d", len(results), len(inputs))
 	}
 
-	for i, out := range results {
-		if i == 5 {
-			// Unknown element passes through
-			if out != inputs[i] {
-				t.Errorf("result %d: expected passthrough, got %s", i, out)
-			}
-			continue
-		}
-		if !strings.Contains(out, `shadowrootmode="open"`) {
-			t.Errorf("result %d: missing DSD", i)
+	for i, got := range results {
+		want := golden(t, goldens[i])
+		if got != want {
+			t.Errorf("result %d (%s): mismatch\ngot:\n%s\nwant:\n%s", i, goldens[i], got, want)
 		}
 	}
 }
@@ -154,6 +146,7 @@ func TestBatch(t *testing.T) {
 func TestConcurrent(t *testing.T) {
 	r := newRenderer(t)
 	ctx := context.Background()
+	want := golden(t, "card")
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 20)
@@ -162,13 +155,13 @@ func TestConcurrent(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			out, err := r.RenderHTML(ctx, `<x-card><p>concurrent</p></x-card>`)
+			got, err := r.RenderHTML(ctx, `<test-card><h2 slot="header">Hi</h2><p>Body</p></test-card>`)
 			if err != nil {
 				errs <- fmt.Errorf("render %d: %w", i, err)
 				return
 			}
-			if !strings.Contains(out, `shadowrootmode="open"`) {
-				errs <- fmt.Errorf("render %d: missing DSD", i)
+			if got != want {
+				errs <- fmt.Errorf("render %d: mismatch", i)
 			}
 		}(i)
 	}
@@ -181,14 +174,14 @@ func TestConcurrent(t *testing.T) {
 }
 
 func BenchmarkRenderHTML(b *testing.B) {
-	r, err := New(context.Background(), 0)
+	r, err := New(context.Background(), testSource, 0)
 	if err != nil {
 		b.Fatal(err)
 	}
 	defer r.Close(context.Background())
 
 	ctx := context.Background()
-	input := `<x-card><h2 slot="header">Bench</h2><p>Body</p></x-card>`
+	input := `<test-card><h2 slot="header">Bench</h2><p>Body</p></test-card>`
 
 	b.ResetTimer()
 	for range b.N {
@@ -200,7 +193,7 @@ func BenchmarkRenderHTML(b *testing.B) {
 }
 
 func BenchmarkRenderBatch(b *testing.B) {
-	r, err := New(context.Background(), 0)
+	r, err := New(context.Background(), testSource, 0)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -209,7 +202,7 @@ func BenchmarkRenderBatch(b *testing.B) {
 	ctx := context.Background()
 	inputs := make([]string, 50)
 	for i := range inputs {
-		inputs[i] = `<x-card><h2 slot="header">Bench</h2><p>Body</p></x-card>`
+		inputs[i] = `<test-card><h2 slot="header">Bench</h2><p>Body</p></test-card>`
 	}
 
 	b.ResetTimer()

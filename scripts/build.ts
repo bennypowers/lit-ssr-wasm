@@ -6,6 +6,7 @@
 
 import * as esbuild from 'esbuild';
 import { resolve, dirname } from 'node:path';
+import { stubNodeBuiltins } from '../src/esbuild-stubs.ts';
 
 /** Swap `./io.js` imports to the platform-specific I/O module. */
 function aliasIO(target: string): esbuild.Plugin {
@@ -19,29 +20,6 @@ function aliasIO(target: string): esbuild.Plugin {
   };
 }
 
-/** Replace Node.js built-in imports with stubs for the Javy QuickJS runtime. */
-const stubNodeBuiltins: esbuild.Plugin = {
-  name: 'stub-node-builtins',
-  setup(build) {
-    const builtins = /^(node:|buffer|fs|path|stream|util|events|crypto|os|url|http|https|net|tls|child_process|module|vm|zlib)/;
-    build.onResolve({ filter: builtins }, args => ({
-      path: args.path,
-      namespace: 'stub',
-    }));
-    build.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-      contents: [
-        'export default {};',
-        'export const Buffer = {',
-        '  from: x => typeof x === "string" ? new TextEncoder().encode(x) : new Uint8Array(x),',
-        '  isBuffer: () => false,',
-        '  alloc: n => new Uint8Array(n),',
-        '};',
-        'export const readFileSync = () => "";',
-      ].join('\n'),
-    }));
-  },
-};
-
 const common: esbuild.BuildOptions = {
   bundle: true,
   format: 'esm' as const,
@@ -53,22 +31,6 @@ const common: esbuild.BuildOptions = {
 };
 
 await Promise.all([
-  // Compiled mode: components baked in, reads HTML from stdin
-  esbuild.build({
-    ...common,
-    entryPoints: ['src/entry.ts'],
-    outfile: 'dist/lit-ssr-bundle.js',
-    platform: 'node',
-    external: ['node:fs'],
-    plugins: [aliasIO('node.ts')],
-  }),
-  esbuild.build({
-    ...common,
-    entryPoints: ['src/entry.ts'],
-    outfile: 'dist/lit-ssr-javy.js',
-    platform: 'node',
-    plugins: [aliasIO('javy.ts'), stubNodeBuiltins],
-  }),
   // Runtime mode: no components, evals JS source from JSON stdin
   esbuild.build({
     ...common,
@@ -85,6 +47,22 @@ await Promise.all([
     platform: 'node',
     plugins: [aliasIO('javy.ts'), stubNodeBuiltins],
   }),
+  // Demo: baked-in components for the demo site (not shipped)
+  esbuild.build({
+    ...common,
+    entryPoints: ['src/demo-entry.ts'],
+    outfile: 'dist/lit-ssr-demo-bundle.js',
+    platform: 'node',
+    external: ['node:fs'],
+    plugins: [aliasIO('node.ts')],
+  }),
+  esbuild.build({
+    ...common,
+    entryPoints: ['src/demo-entry.ts'],
+    outfile: 'dist/lit-ssr-demo-javy.js',
+    platform: 'node',
+    plugins: [aliasIO('javy.ts'), stubNodeBuiltins],
+  }),
 ]);
 
-console.log('Built: compiled + runtime bundles for Node.js and Javy');
+console.log('Built: runtime + demo bundles for Node.js and Javy');

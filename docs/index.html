@@ -3,12 +3,13 @@
 
     <h2>Two modes</h2>
 
-    <h3>Builtin mode (<code>lit-ssr-builtin.wasm</code>)</h3>
-    <p>Component definitions are baked into the WASM module at build time.
+    <h3>Compiled mode</h3>
+    <p>Component definitions are baked into a WASM module at build time.
       The module reads HTML from stdin and writes DSD-enhanced HTML to stdout.
       Fast and predictable -- ideal for static site generators, build pipelines,
-      or any scenario where components are known ahead of time.</p>
-    <pre><code>echo '&lt;my-alert type="success"&gt;Done&lt;/my-alert&gt;' | wasmtime lit-ssr-builtin.wasm</code></pre>
+      or any scenario where components are known ahead of time. The compiled mode
+      demo on this site uses <code>lit-ssr-demo.wasm</code>, which has the
+      example <code>&lt;my-alert&gt;</code> component baked in.</p>
 
     <h3>Runtime mode (<code>lit-ssr-runtime.wasm</code>)</h3>
     <p>No component definitions are baked in. The module reads JSON from stdin
@@ -55,7 +56,7 @@
     </p>
     <p>Critically, the component's JavaScript definition is not needed on the
       page for DSD styles to apply. The compiled mode demo proves this: it
-      loads <code>lit-ssr-builtin.wasm</code> and uses its output via
+      loads <code>lit-ssr-demo.wasm</code> and uses its output via
       <code>setHTMLUnsafe()</code>, but never loads the <code>&lt;my-alert&gt;</code>
       element definition as JavaScript. The colored, styled alerts you see come
       entirely from Declarative Shadow DOM.

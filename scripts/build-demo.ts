@@ -21,7 +21,7 @@ const distDir = resolve(root, 'dist');
 await mkdir(siteDir, { recursive: true });
 
 // Step 1: Copy WASM files and static assets to _site/
-const wasmCopies = ['lit-ssr-runtime.wasm', 'lit-ssr-builtin.wasm'].map(file =>
+const wasmCopies = ['lit-ssr-runtime.wasm', 'lit-ssr-demo.wasm'].map(file =>
   copyFile(resolve(distDir, file), resolve(siteDir, file)).catch(() =>
     console.warn(`Warning: ${file} not found in dist/. Run npm run build:wasm first.`),
   ),

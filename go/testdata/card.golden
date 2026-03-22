@@ -1,0 +1,10 @@
+<!--lit-part 2CDBXuDImb4=--><test-card><template shadowroot="open" shadowrootmode="open"><style>
+    :host { display: block; border: 1px solid #ccc; padding: 1rem; }
+    ::slotted([slot="header"]) { font-weight: bold; }
+  </style><!--lit-part CwIdmHYRJOA=-->
+      <div class="card">
+        <slot name="header"></slot>
+        <slot></slot>
+        <slot name="footer"></slot>
+      </div>
+    <!--/lit-part--></template><h2 slot="header">Hi</h2><p>Body</p></test-card><!--/lit-part-->

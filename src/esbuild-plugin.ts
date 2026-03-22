@@ -5,8 +5,8 @@
  * so the consumer's Lit copy shares the same customElements registry
  * and DOM shims that the lit-ssr-wasm runtime provides.
  *
- * Usage:
- *   import { litSsrWasmPlugin } from 'lit-ssr-wasm/esbuild-plugin';
+ * Usage (copy this file into your project or reference by path):
+ *   import { litSsrWasmPlugin } from './esbuild-plugin.ts';
  *
  *   esbuild.build({
  *     entryPoints: ['my-components.ts'],

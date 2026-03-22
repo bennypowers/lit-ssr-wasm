@@ -177,11 +177,17 @@ to `globalThis.btoa` for correct hydration digest computation.
 
 ### Example build script
 
+The plugins are in `src/esbuild-plugin.ts` and `src/esbuild-stubs.ts`. Copy
+them into your project or reference by path:
+
 ```typescript
 import * as esbuild from 'esbuild';
-import { litSsrWasmPlugin } from 'lit-ssr-wasm/esbuild-plugin';
-import { stubNodeBuiltins } from 'lit-ssr-wasm/esbuild-stubs';
+import { litSsrWasmPlugin } from './path/to/esbuild-plugin.ts';
+import { stubNodeBuiltins } from './path/to/esbuild-stubs.ts';
 
+// Entry point should NOT export anything -- just define and register
+// components. esbuild's ESM format is fine as long as the entry has
+// no top-level exports (eval does not support import/export syntax).
 await esbuild.build({
   entryPoints: ['src/components/index.ts'],
   outfile: 'dist/components.js',

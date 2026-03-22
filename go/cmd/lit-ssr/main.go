@@ -124,7 +124,7 @@ func loadSource(bundle, dir string, components []string) (string, error) {
 			return "", fmt.Errorf("read %s: %w", f, err)
 		}
 		sb.Write(data)
-		sb.WriteByte('\n')
+		sb.WriteString(";\n")
 	}
 	return sb.String(), nil
 }

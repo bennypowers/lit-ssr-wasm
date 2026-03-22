@@ -4,35 +4,51 @@
 // WASM module, using wazero as a pure-Go WASM runtime. No CGo, no
 // Node.js sidecar -- just a single embedded .wasm blob.
 //
-// The WASM module runs a read loop: it reads NUL-terminated HTML from
-// stdin, renders it with Declarative Shadow DOM, and writes the result
-// (also NUL-terminated) to stdout. This allows a single WASM instance
-// to handle many renders without cold-start overhead.
+// The renderer accepts bundled JavaScript component definitions at
+// construction time. Internally it uses the runtime WASM module, which
+// evaluates the JS source in QuickJS, registers custom elements, and
+// renders HTML with Declarative Shadow DOM.
 //
 // Usage:
 //
-//	renderer, err := litssr.New(ctx, 0) // 0 = runtime.NumCPU() workers
+//	source, _ := os.ReadFile("components.js")
+//	renderer, err := litssr.New(ctx, string(source), 0)
 //	if err != nil { ... }
 //	defer renderer.Close(ctx)
 //
-//	html, err := renderer.RenderHTML(ctx, `<x-card>hello</x-card>`)
+//	html, err := renderer.RenderHTML(ctx, `<my-card>hello</my-card>`)
 package litssr
 
 import (
 	"bufio"
 	"context"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
-//go:embed lit-ssr.wasm
-var litSSRWasm []byte
+//go:embed lit-ssr-runtime.wasm
+var runtimeWasm []byte
+
+// Matches customElements.define('my-el', ...) calls. This is a property
+// access on a global, so it survives minification. The @customElement
+// decorator is NOT matched because minifiers rename the imported symbol.
+// Use NewWithElements for decorator-based or minified bundles.
+var defineRe = regexp.MustCompile(`customElements\.define\(\s*['"]([^'"]+)['"]`)
+
+// initRequest is sent once per worker to load component source.
+type initRequest struct {
+	Source   string   `json:"source"`
+	Elements []string `json:"elements"`
+}
 
 // request is sent to a worker via its channel.
 type request struct {
@@ -85,10 +101,31 @@ type Renderer struct {
 }
 
 // New creates a renderer pool with the given concurrency.
+// componentSource is bundled JavaScript containing component
+// definitions. Element tag names are extracted automatically by
+// matching customElements.define('tag-name', ...) calls via regex.
+// For minified bundles or decorator-based registration, use
+// NewWithElements instead.
 // If workers is 0, defaults to runtime.NumCPU().
-func New(ctx context.Context, workers int) (*Renderer, error) {
+func New(ctx context.Context, componentSource string, workers int) (*Renderer, error) {
+	elements := extractElements(componentSource)
+	if len(elements) == 0 {
+		return nil, fmt.Errorf("litssr: no customElements.define() calls found in source; use NewWithElements for decorator-based or minified bundles")
+	}
+	return NewWithElements(ctx, componentSource, elements, workers)
+}
+
+// NewWithElements creates a renderer pool with an explicit element list.
+// Use this when element tag names can't be reliably extracted from the
+// source (e.g., dynamic tag names or nonstandard registration patterns).
+// If workers is 0, defaults to runtime.NumCPU().
+func NewWithElements(ctx context.Context, componentSource string, elements []string, workers int) (*Renderer, error) {
 	if workers <= 0 {
 		workers = runtime.NumCPU()
+	}
+
+	if len(elements) == 0 {
+		return nil, fmt.Errorf("litssr: no elements provided")
 	}
 
 	rt := wazero.NewRuntime(ctx)
@@ -98,7 +135,7 @@ func New(ctx context.Context, workers int) (*Renderer, error) {
 		return nil, fmt.Errorf("litssr: instantiate WASI: %w", err)
 	}
 
-	compiled, err := rt.CompileModule(ctx, litSSRWasm)
+	compiled, err := rt.CompileModule(ctx, runtimeWasm)
 	if err != nil {
 		rt.Close(ctx)
 		return nil, fmt.Errorf("litssr: compile WASM: %w", err)
@@ -111,7 +148,7 @@ func New(ctx context.Context, workers int) (*Renderer, error) {
 	}
 
 	for i := range workers {
-		w, err := r.startWorker(ctx, i)
+		w, err := r.startWorker(ctx, componentSource, elements, i)
 		if err != nil {
 			r.Close(ctx)
 			return nil, fmt.Errorf("litssr: start worker %d: %w", i, err)
@@ -124,7 +161,24 @@ func New(ctx context.Context, workers int) (*Renderer, error) {
 	return r, nil
 }
 
-func (r *Renderer) startWorker(ctx context.Context, _ int) (*worker, error) {
+// extractElements finds element tag names by matching
+// customElements.define('tag-name', ...) calls in the source.
+func extractElements(source string) []string {
+	matches := defineRe.FindAllStringSubmatch(source, -1)
+	seen := make(map[string]struct{}, len(matches))
+	elements := make([]string, 0, len(matches))
+	for _, m := range matches {
+		tag := m[1]
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		elements = append(elements, tag)
+	}
+	return elements
+}
+
+func (r *Renderer) startWorker(ctx context.Context, source string, elements []string, _ int) (*worker, error) {
 	stdinR, stdinW := io.Pipe()
 	stdoutR, stdoutW := io.Pipe()
 	stderr := &stderrCollector{}
@@ -135,19 +189,57 @@ func (r *Renderer) startWorker(ctx context.Context, _ int) (*worker, error) {
 		WithStdout(stdoutW).
 		WithStderr(stderr)
 
-	// Start the WASM module in a goroutine. It will block in its read
-	// loop waiting for input on stdin.
 	go func() {
 		_, err := r.runtime.InstantiateModule(ctx, r.compiled, cfg)
-		_ = err // Module exits when stdin is closed (EOF)
+		if err != nil {
+			// Close stdin so w.init() gets an error instead of blocking.
+			stdinR.CloseWithError(err)
+		}
 		stdoutW.Close()
 	}()
 
-	return &worker{
+	w := &worker{
 		stdin:  stdinW,
 		stdout: bufio.NewReader(stdoutR),
 		stderr: stderr,
-	}, nil
+	}
+
+	// Send init message with source + elements once per worker.
+	if err := w.init(source, elements); err != nil {
+		stdinW.Close()
+		return nil, err
+	}
+
+	return w, nil
+}
+
+// init sends the component source and element list to the WASM worker.
+// Called once per worker at startup. The WASM evals the source, registers
+// custom elements, and acks with \0.
+func (w *worker) init(source string, elements []string) error {
+	req := initRequest{Source: source, Elements: elements}
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("litssr: marshal init: %w", err)
+	}
+	payload = append(payload, '\n')
+
+	if _, err := w.stdin.Write(payload); err != nil {
+		return fmt.Errorf("litssr: write init: %w", err)
+	}
+
+	// Wait for ack
+	ack, err := w.stdout.ReadString('\x00')
+	if err != nil {
+		return fmt.Errorf("litssr: read init ack: %w", err)
+	}
+	_ = ack
+
+	if errMsg := strings.TrimSpace(w.stderr.drain()); errMsg != "" {
+		return fmt.Errorf("litssr: init: %s", errMsg)
+	}
+
+	return nil
 }
 
 func (r *Renderer) runWorker(w *worker) {
@@ -159,12 +251,11 @@ func (r *Renderer) runWorker(w *worker) {
 }
 
 func (w *worker) render(inputHTML string) (string, error) {
-	// Write NUL-terminated HTML to the worker's stdin
+	// Send raw HTML terminated by NUL (supports multi-line HTML).
 	if _, err := io.WriteString(w.stdin, inputHTML+"\x00"); err != nil {
 		return "", fmt.Errorf("litssr: write to worker: %w", err)
 	}
 
-	// Read NUL-terminated HTML from the worker's stdout
 	result, err := w.stdout.ReadString('\x00')
 	if err != nil {
 		return "", fmt.Errorf("litssr: read from worker: %w", err)
@@ -173,8 +264,7 @@ func (w *worker) render(inputHTML string) (string, error) {
 	// Strip the trailing NUL
 	result = result[:len(result)-1]
 
-	// Check stderr for errors
-	if errMsg := w.stderr.drain(); errMsg != "" {
+	if errMsg := strings.TrimSpace(w.stderr.drain()); errMsg != "" {
 		if result == "" {
 			return "", fmt.Errorf("litssr: %s", errMsg)
 		}
@@ -235,7 +325,6 @@ func (r *Renderer) RenderBatch(ctx context.Context, inputs []string) ([]string, 
 
 // Close shuts down all workers and releases resources.
 func (r *Renderer) Close(ctx context.Context) error {
-	// Close all worker stdin pipes, causing EOF in the WASM read loops
 	for _, w := range r.workers {
 		w.stdin.Close()
 	}

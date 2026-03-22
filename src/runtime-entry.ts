@@ -1,49 +1,50 @@
 /**
  * Entry point for the Lit SSR WASM module (runtime mode).
  *
- * No component definitions baked in. Read loop:
- *   request (stdin):  JSON line {"source":"...","html":"...","elements":[...]}\n
- *   response (stdout): rendered HTML, NUL-terminated
- *   errors go to stderr
- * Exits cleanly at EOF.
+ * Two-phase protocol:
+ *   1. Init:   JSON line {"source":"...","elements":[...]}\n -> ack \0
+ *   2. Render: NUL-terminated HTML -> NUL-terminated rendered HTML
+ * Errors go to stderr. Exits cleanly at EOF.
  */
 
+// SSR shims must be installed before Lit loads. These side-effect
+// imports are evaluated first in the bundled output.
+import './ssr-css-fix.js';
+import './ssr-shims.js';
+
 import { processHTML } from './harness/render.js';
-import { readLine, writeStdout, writeStderr } from './io.js';
+import { readLine, readUntilNul, writeStdout, writeStderr } from './io.js';
 
-import { LitElement, html, css, nothing, noChange } from 'lit';
-import { classMap } from 'lit/directives/class-map.js';
-import { styleMap } from 'lit/directives/style-map.js';
-import { repeat } from 'lit/directives/repeat.js';
-import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+// Phase 1: read init message
+const initLine = readLine();
+if (initLine === null) throw new Error('unexpected EOF before init');
 
-Object.assign(globalThis, {
-  LitElement, html, css, nothing, noChange,
-  classMap, styleMap, repeat, unsafeHTML,
-});
+let known: Set<string>;
+try {
+  const init = JSON.parse(initLine) as { source: string; elements: string[] };
+  known = new Set(init.elements);
+  if (init.source) {
+    (0, eval)(init.source);
+  }
+  writeStdout('\0'); // ack
+} catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : String(e);
+  writeStderr(msg + '\n');
+  writeStdout('\0');
+  throw e;
+}
 
+// Phase 2: render loop -- NUL-terminated HTML in, NUL-terminated HTML out.
 for (;;) {
-  const line = readLine();
-  if (line === null) break;
-  if (line.trim() === '') continue;
+  const html = readUntilNul();
+  if (html === null) break;
+  if (html.trim() === '') {
+    writeStdout('\0');
+    continue;
+  }
 
   try {
-    const req = JSON.parse(line) as {
-      source: string;
-      html: string;
-      elements: string[];
-    };
-
-    // Only eval source if it contains elements we haven't registered yet.
-    // QuickJS keeps state across the read loop, so once components are
-    // defined they stay registered for all subsequent renders.
-    const known = new Set(req.elements);
-    const needsEval = req.elements.some(name => !customElements.get(name));
-    if (needsEval && req.source) {
-      (0, eval)(req.source);
-    }
-
-    const output = processHTML(req.html, known);
+    const output = processHTML(html, known);
     writeStdout(output + '\0');
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

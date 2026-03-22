@@ -26,21 +26,21 @@
         "scripts/build.ts"
       ],
       "output": [
-        "dist/lit-ssr-bundle.js",
-        "dist/lit-ssr-javy.js",
         "dist/lit-ssr-runtime-bundle.js",
-        "dist/lit-ssr-runtime-javy.js"
+        "dist/lit-ssr-runtime-javy.js",
+        "dist/lit-ssr-demo-bundle.js",
+        "dist/lit-ssr-demo-javy.js"
       ]
     },
     "build:wasm": {
-      "command": "javy build -J javy-stream-io=y -J text-encoding=y dist/lit-ssr-runtime-javy.js -o dist/lit-ssr-runtime.wasm && javy build -J javy-stream-io=y -J text-encoding=y dist/lit-ssr-javy.js -o dist/lit-ssr-builtin.wasm",
+      "command": "javy build -J javy-stream-io=y -J text-encoding=y dist/lit-ssr-runtime-javy.js -o dist/lit-ssr-runtime.wasm && javy build -J javy-stream-io=y -J text-encoding=y dist/lit-ssr-demo-javy.js -o dist/lit-ssr-demo.wasm",
       "dependencies": [
         "build:js"
       ],
       "files": [],
       "output": [
         "dist/lit-ssr-runtime.wasm",
-        "dist/lit-ssr-builtin.wasm"
+        "dist/lit-ssr-demo.wasm"
       ]
     },
     "start": {

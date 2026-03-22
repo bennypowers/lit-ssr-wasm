@@ -30,7 +30,7 @@
   <script type="module">
     import { run } from './wasi-shim.js';
 
-    const wasmModule = await WebAssembly.compileStreaming(fetch('lit-ssr-builtin.wasm'));
+    const wasmModule = await WebAssembly.compileStreaming(fetch('lit-ssr-demo.wasm'));
 
     const input = document.getElementById('input');
     const output = document.getElementById('output');

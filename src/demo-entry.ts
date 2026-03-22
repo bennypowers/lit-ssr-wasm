@@ -8,6 +8,8 @@
  * Exits cleanly at EOF.
  */
 
+import './ssr-css-fix.js';
+
 import { processHTML } from './harness/render.js';
 import { readUntilNul, writeStdout, writeStderr } from './io.js';
 

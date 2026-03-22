@@ -9,8 +9,7 @@ clean:
 	rm -rf $(DIST)
 
 define BUILD
-	CGO_ENABLED=0 GOOS=$(1) GOARCH=$(2) go build $(LDFLAGS) -o $(DIST)/lit-ssr-builtin-$(3) ./cmd/lit-ssr
-	CGO_ENABLED=0 GOOS=$(1) GOARCH=$(2) go build $(LDFLAGS) -o $(DIST)/lit-ssr-runtime-$(3) ./cmd/lit-ssr-runtime
+	CGO_ENABLED=0 GOOS=$(1) GOARCH=$(2) go build $(LDFLAGS) -o $(DIST)/lit-ssr-$(3) ./cmd/lit-ssr
 endef
 
 linux-x64:

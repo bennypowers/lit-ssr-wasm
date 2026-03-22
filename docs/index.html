@@ -3,23 +3,22 @@
 
     <h2>Two modes</h2>
 
-    <h3>Builtin mode (<code>lit-ssr-builtin.wasm</code>)</h3>
-    <p>Component definitions are baked into the WASM module at build time.
+    <h3>Compiled mode</h3>
+    <p>Component definitions are baked into a WASM module at build time.
       The module reads HTML from stdin and writes DSD-enhanced HTML to stdout.
       Fast and predictable -- ideal for static site generators, build pipelines,
-      or any scenario where components are known ahead of time.</p>
-    <pre><code>echo '&lt;my-alert type="success"&gt;Done&lt;/my-alert&gt;' | wasmtime lit-ssr-builtin.wasm</code></pre>
+      or any scenario where components are known ahead of time. The compiled mode
+      demo on this site uses <code>lit-ssr-demo.wasm</code>, which has the
+      example <code>&lt;my-alert&gt;</code> component baked in.</p>
 
     <h3>Runtime mode (<code>lit-ssr-runtime.wasm</code>)</h3>
-    <p>No component definitions are baked in. The module reads JSON from stdin
-      containing the component JavaScript source, HTML to render, and element
-      tag names. Lit APIs (<code>LitElement</code>, <code>html</code>,
-      <code>css</code>, <code>classMap</code>, etc.) are exposed as globals
-      inside the QuickJS context, so user-provided source does not need import
-      statements. The source is evaluated internally by QuickJS, registering
-      custom elements, then the HTML is rendered with DSD.
+    <p>No component definitions are baked in. The module uses a two-phase
+      protocol: an init message sends the component JavaScript source and
+      element tag names once, then each render sends NUL-terminated HTML.
+      Consumers bundle Lit and their components using the provided esbuild
+      plugins. The WASM runtime provides SSR shims (DOM, <code>btoa</code>,
+      <code>URL</code>, <code>Buffer</code>, etc.) but not Lit APIs.
     </p>
-    <pre><code>echo '{"source":"...","html":"...","elements":["my-alert"]}' | wasmtime lit-ssr-runtime.wasm</code></pre>
 
     <h2>How it works</h2>
 
@@ -55,7 +54,7 @@
     </p>
     <p>Critically, the component's JavaScript definition is not needed on the
       page for DSD styles to apply. The compiled mode demo proves this: it
-      loads <code>lit-ssr-builtin.wasm</code> and uses its output via
+      loads <code>lit-ssr-demo.wasm</code> and uses its output via
       <code>setHTMLUnsafe()</code>, but never loads the <code>&lt;my-alert&gt;</code>
       element definition as JavaScript. The colored, styled alerts you see come
       entirely from Declarative Shadow DOM.

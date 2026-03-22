@@ -32,7 +32,6 @@ jobs:
         run: |
           gh release create '${{ github.ref_name }}' \
             --generate-notes \
-            dist/lit-ssr-builtin.wasm \
             dist/lit-ssr-runtime.wasm
 
   build-binaries:
@@ -70,21 +69,17 @@ jobs:
       - run: npm run build:wasm
 
       - name: Copy WASM to go/
-        run: |
-          cp dist/lit-ssr-builtin.wasm go/lit-ssr.wasm
-          cp dist/lit-ssr-runtime.wasm go/lit-ssr-runtime.wasm
+        run: cp dist/lit-ssr-runtime.wasm go/lit-ssr-runtime.wasm
 
       - name: Build ${{ matrix.platform }}
         working-directory: go
         run: |
-          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -ldflags '-s -w' -o ../dist/bin/lit-ssr-builtin-${{ matrix.platform }}${{ matrix.ext }} ./cmd/lit-ssr
-          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -ldflags '-s -w' -o ../dist/bin/lit-ssr-runtime-${{ matrix.platform }}${{ matrix.ext }} ./cmd/lit-ssr-runtime
+          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -ldflags '-s -w' -o ../dist/bin/lit-ssr-${{ matrix.platform }}${{ matrix.ext }} ./cmd/lit-ssr
 
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload '${{ github.ref_name }}' \
-            dist/bin/lit-ssr-builtin-${{ matrix.platform }}${{ matrix.ext }} \
-            dist/bin/lit-ssr-runtime-${{ matrix.platform }}${{ matrix.ext }} \
+            dist/bin/lit-ssr-${{ matrix.platform }}${{ matrix.ext }} \
             --clobber

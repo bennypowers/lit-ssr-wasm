@@ -10,7 +10,7 @@ import type { Plugin } from 'esbuild';
 export const stubNodeBuiltins: Plugin = {
   name: 'stub-node-builtins',
   setup(build) {
-    const builtins = /^(node:|buffer|fs|path|stream|util|events|crypto|os|url|http|https|net|tls|child_process|module|vm|zlib)/;
+    const builtins = /^(?:node:)?(?:buffer|fs|path|stream|util|events|crypto|os|url|http|https|net|tls|child_process|module|vm|zlib)(?:\/|$)/;
     build.onResolve({ filter: builtins }, args => ({
       path: args.path,
       namespace: 'stub',

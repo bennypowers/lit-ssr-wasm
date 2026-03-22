@@ -104,20 +104,21 @@ type Renderer struct {
 
 // New creates a renderer pool with the given concurrency.
 // componentSource is bundled JavaScript containing component
-// definitions (customElements.define calls). Element tag names are
-// extracted automatically via regex.
+// definitions (custom element registrations such as customElements.define
+// or Lit's @customElement decorator). Element tag names are extracted
+// automatically via regex.
 // If workers is 0, defaults to runtime.NumCPU().
 func New(ctx context.Context, componentSource string, workers int) (*Renderer, error) {
 	elements := extractElements(componentSource)
 	if len(elements) == 0 {
-		return nil, fmt.Errorf("litssr: no customElements.define() calls found in component source")
+		return nil, fmt.Errorf("litssr: no custom element registrations found in component source")
 	}
 	return NewWithElements(ctx, componentSource, elements, workers)
 }
 
 // NewWithElements creates a renderer pool with an explicit element list.
-// Use this when element tag names can't be extracted from the source
-// (e.g., when using decorator-based registration).
+// Use this when element tag names can't be reliably extracted from the
+// source (e.g., dynamic tag names or nonstandard registration patterns).
 // If workers is 0, defaults to runtime.NumCPU().
 func NewWithElements(ctx context.Context, componentSource string, elements []string, workers int) (*Renderer, error) {
 	if workers <= 0 {
@@ -163,7 +164,8 @@ func NewWithElements(ctx context.Context, componentSource string, elements []str
 	return r, nil
 }
 
-// extractElements finds all customElements.define('tag-name', ...) calls.
+// extractElements finds element tag names via defineRe
+// (customElements.define and customElement calls).
 func extractElements(source string) []string {
 	matches := defineRe.FindAllStringSubmatch(source, -1)
 	elements := make([]string, 0, len(matches))

@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	litssr "bennypowers.dev/lit-ssr-go"
+	litssr "github.com/bennypowers/lit-ssr-wasm/go"
 )
 
 // stringSlice implements flag.Value for repeated --components flags.

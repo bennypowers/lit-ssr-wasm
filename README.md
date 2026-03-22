@@ -80,7 +80,7 @@ import (
     "log"
     "os"
 
-    litssr "bennypowers.dev/lit-ssr-go"
+    litssr "github.com/bennypowers/lit-ssr-wasm/go"
 )
 
 func main() {

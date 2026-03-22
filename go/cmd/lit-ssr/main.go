@@ -37,9 +37,9 @@ func main() {
 	var bundle string
 	var components stringSlice
 	var componentDir string
-	flag.StringVar(&bundle, "bundle", "", "path to a pre-built JS bundle")
-	flag.Var(&components, "components", "path to a component JS file (repeatable)")
-	flag.StringVar(&componentDir, "dir", "", "directory of component JS files")
+	flag.StringVar(&bundle, "bundle", "", "path to a pre-built JS bundle (recommended)")
+	flag.Var(&components, "components", "path to a standalone JS file with no import/export (repeatable)")
+	flag.StringVar(&componentDir, "dir", "", "directory of standalone JS files (no import/export)")
 	flag.Parse()
 
 	source, err := loadSource(bundle, componentDir, components)

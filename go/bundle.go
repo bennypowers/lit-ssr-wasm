@@ -26,7 +26,11 @@ func needsBundle(source string) bool {
 // empty, the current working directory is used.
 func bundleSource(source, resolveDir string) (string, error) {
 	if resolveDir == "" {
-		resolveDir, _ = os.Getwd()
+		var err error
+		resolveDir, err = os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("litssr: unable to determine resolve directory: %w", err)
+		}
 	}
 
 	nodePaths := findNodeModules(resolveDir)
@@ -67,7 +71,7 @@ func bundleFiles(files []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("litssr: abs path %s: %w", f, err)
 		}
-		fmt.Fprintf(&entry, "import '%s';\n", abs)
+		fmt.Fprintf(&entry, "import '%s';\n", filepath.ToSlash(abs))
 	}
 
 	return bundleSource(entry.String(), resolveDir)

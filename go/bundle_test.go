@@ -25,7 +25,10 @@ func TestNeedsBundleAlreadyBundled(t *testing.T) {
 }
 
 func TestBundleSource(t *testing.T) {
-	resolveDir, _ := filepath.Abs("testdata")
+	resolveDir, err := filepath.Abs("testdata")
+	if err != nil {
+		t.Fatalf("filepath.Abs: %v", err)
+	}
 	bundled, err := bundleSource(unbundledFixture, resolveDir)
 	if err != nil {
 		t.Fatalf("bundleSource: %v", err)

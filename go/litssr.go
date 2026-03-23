@@ -101,25 +101,63 @@ type Renderer struct {
 }
 
 // New creates a renderer pool with the given concurrency.
-// componentSource is bundled JavaScript containing component
-// definitions. Element tag names are extracted automatically by
-// matching customElements.define('tag-name', ...) calls via regex.
-// For minified bundles or decorator-based registration, use
-// NewWithElements instead.
+// componentSource is JavaScript or TypeScript containing component
+// definitions. If it contains import/export statements, it is
+// automatically bundled with esbuild (using the correct plugins
+// for lit-ssr-wasm compatibility). Pre-bundled source is used as-is.
+// Element tag names are extracted via regex. For minified bundles
+// or decorator-based registration, use NewWithElements instead.
 // If workers is 0, defaults to runtime.NumCPU().
 func New(ctx context.Context, componentSource string, workers int) (*Renderer, error) {
-	elements := extractElements(componentSource)
+	source, err := ensureBundled(componentSource)
+	if err != nil {
+		return nil, err
+	}
+	elements := extractElements(source)
 	if len(elements) == 0 {
 		return nil, fmt.Errorf("litssr: no customElements.define() calls found in source; use NewWithElements for decorator-based or minified bundles")
 	}
-	return NewWithElements(ctx, componentSource, elements, workers)
+	return createRenderer(ctx, source, elements, workers)
+}
+
+// NewFromFiles creates a renderer pool from JS/TS source files.
+// Files are bundled with esbuild automatically. Element tag names
+// are extracted from the bundled output.
+// If workers is 0, defaults to runtime.NumCPU().
+func NewFromFiles(ctx context.Context, files []string, workers int) (*Renderer, error) {
+	source, err := bundleFiles(files)
+	if err != nil {
+		return nil, err
+	}
+	elements := extractElements(source)
+	if len(elements) == 0 {
+		return nil, fmt.Errorf("litssr: no customElements.define() calls found in bundled source")
+	}
+	return createRenderer(ctx, source, elements, workers)
 }
 
 // NewWithElements creates a renderer pool with an explicit element list.
 // Use this when element tag names can't be reliably extracted from the
 // source (e.g., dynamic tag names or nonstandard registration patterns).
+// If the source contains import/export statements, it is automatically
+// bundled.
 // If workers is 0, defaults to runtime.NumCPU().
 func NewWithElements(ctx context.Context, componentSource string, elements []string, workers int) (*Renderer, error) {
+	source, err := ensureBundled(componentSource)
+	if err != nil {
+		return nil, err
+	}
+	return createRenderer(ctx, source, elements, workers)
+}
+
+func ensureBundled(source string) (string, error) {
+	if !needsBundle(source) {
+		return source, nil
+	}
+	return bundleSource(source, "")
+}
+
+func createRenderer(ctx context.Context, componentSource string, elements []string, workers int) (*Renderer, error) {
 	if workers <= 0 {
 		workers = runtime.NumCPU()
 	}

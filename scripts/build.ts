@@ -47,6 +47,16 @@ await Promise.all([
     platform: 'node',
     plugins: [aliasIO('javy.ts'), stubNodeBuiltins],
   }),
+  // Bytecode mode: template for pre-compiled bytecode (user source injected at compile time)
+  // IIFE format avoids ESM module scoping issues when compiled to QuickJS bytecode.
+  esbuild.build({
+    ...common,
+    format: 'iife',
+    entryPoints: ['src/bytecode-entry.ts'],
+    outfile: 'dist/lit-ssr-bytecode-entry.js',
+    platform: 'node',
+    plugins: [aliasIO('javy.ts'), stubNodeBuiltins],
+  }),
   // Demo: baked-in components for the demo site (not shipped)
   esbuild.build({
     ...common,
@@ -65,4 +75,4 @@ await Promise.all([
   }),
 ]);
 
-console.log('Built: runtime + demo bundles for Node.js and Javy');
+console.log('Built: runtime + bytecode + demo bundles for Node.js and Javy');

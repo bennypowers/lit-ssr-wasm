@@ -28,6 +28,7 @@
       "output": [
         "dist/lit-ssr-runtime-bundle.js",
         "dist/lit-ssr-runtime-javy.js",
+        "dist/lit-ssr-bytecode-entry.js",
         "dist/lit-ssr-demo-bundle.js",
         "dist/lit-ssr-demo-javy.js"
       ]

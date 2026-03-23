@@ -36,6 +36,9 @@ func CompileSource(ctx context.Context, componentSource string) ([]byte, error) 
 	// isolation their mangled variable names collide.
 	wrapped := "(function(){" + componentSource + "})();\n"
 	combined := strings.Replace(bytecodeEntryTemplate, userSourcePlaceholder, wrapped, 1)
+	if combined == bytecodeEntryTemplate {
+		return nil, fmt.Errorf("litssr: compile: user source placeholder not found in template")
+	}
 
 	rt := wazero.NewRuntime(ctx)
 	defer func() { _ = rt.Close(ctx) }()

@@ -111,6 +111,22 @@ func TestNewFromFiles(t *testing.T) {
 	}
 }
 
+func TestNewFromFilesExported(t *testing.T) {
+	r, err := NewFromFiles(context.Background(), []string{"testdata/exported-component.ts"}, 1)
+	if err != nil {
+		t.Fatalf("NewFromFiles: %v", err)
+	}
+	t.Cleanup(func() { r.Close(context.Background()) })
+
+	out, err := r.RenderHTML(context.Background(), `<exported-el></exported-el>`)
+	if err != nil {
+		t.Fatalf("RenderHTML: %v", err)
+	}
+	if !strings.Contains(out, `shadowrootmode="open"`) {
+		t.Error("missing DSD in output")
+	}
+}
+
 func TestNewFromFilesCSS(t *testing.T) {
 	r, err := NewFromFiles(context.Background(), []string{"testdata/css-component/css-el.ts"}, 1)
 	if err != nil {
@@ -127,5 +143,27 @@ func TestNewFromFilesCSS(t *testing.T) {
 	}
 	if !strings.Contains(out, "color: green") {
 		t.Error("CSS should be in rendered output")
+	}
+}
+
+func TestBundleSourceExportStripped(t *testing.T) {
+	// Verify that exports in raw source are stripped by esbuild,
+	// since the output is eval'd (not imported as a module).
+	resolveDir, err := filepath.Abs("testdata")
+	if err != nil {
+		t.Fatalf("filepath.Abs: %v", err)
+	}
+	src := `import { LitElement, html } from 'lit';
+export class Foo extends LitElement {
+  render() { return html` + "`<p>hi</p>`" + `; }
+}
+customElements.define('foo-el', Foo);`
+
+	bundled, err := bundleSource(src, resolveDir)
+	if err != nil {
+		t.Fatalf("bundleSource: %v", err)
+	}
+	if strings.Contains(bundled, "\nexport ") {
+		t.Error("bundled output should not contain export statements (eval can't handle them)")
 	}
 }

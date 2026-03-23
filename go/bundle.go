@@ -15,10 +15,15 @@ import (
 // unbundled ES module source needing bundling before eval.
 var importExportRe = regexp.MustCompile(`(?m)^(?:import\s|export\s)`)
 
-// needsBundle returns true if the source contains top-level import/export
-// statements, indicating it needs to be bundled before eval.
+// tsSyntaxRe detects TypeScript-only syntax (type, interface, enum
+// declarations) that QuickJS cannot execute without compilation.
+var tsSyntaxRe = regexp.MustCompile(`(?m)^\s*(?:type|interface|enum)\s+\w+`)
+
+// needsBundle returns true if the source contains ES module syntax or
+// TypeScript-only syntax, indicating it needs to be compiled/bundled
+// before eval in QuickJS.
 func needsBundle(source string) bool {
-	return importExportRe.MatchString(source)
+	return importExportRe.MatchString(source) || tsSyntaxRe.MatchString(source)
 }
 
 // bundleSource bundles JavaScript/TypeScript source into a self-contained
@@ -105,7 +110,7 @@ func ssrBuildOptions(stdin api.StdinOptions, nodePaths []string) api.BuildOption
 	return api.BuildOptions{
 		Stdin:      &stdin,
 		Bundle:     true,
-		Format:     api.FormatESModule,
+		Format:     api.FormatIIFE,
 		Target:     api.ES2022,
 		Platform:   api.PlatformNode,
 		Conditions: []string{"node"},
@@ -221,7 +226,8 @@ export const readFileSync = () => "";`
 }
 
 // stripImportAttributes removes `with { type: 'css' }` from import
-// statements since esbuild doesn't support import attributes natively.
+// statements. Modern esbuild (0.27+) handles import attributes natively,
+// but this normalizes stdin source for compatibility.
 func stripImportAttributes(source string) string {
 	result := source
 	for _, pattern := range []string{

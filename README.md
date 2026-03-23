@@ -30,6 +30,11 @@ The WASM module provides the SSR environment (DOM shims, `@lit-labs/ssr` render
 engine, `btoa`/`atob`, `URL`, `CSS`, etc.). esbuild bundles Lit and your
 component definitions into a self-contained script.
 
+> **Note:** JavaScript dependencies referenced by your components (e.g. `lit`,
+> `@lit-labs/*`) must be installed and resolvable via `node_modules`. The Go
+> library and CLI do not install npm packages; they only bundle what esbuild
+> can find on disk.
+
 ### Declarative Shadow DOM
 
 The output includes `<template shadowrootmode="open">` elements containing the

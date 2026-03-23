@@ -146,7 +146,10 @@ func litCSSPlugin() api.Plugin {
 		Name: "lit-css",
 		Setup: func(build api.PluginBuild) {
 			build.OnResolve(api.OnResolveOptions{Filter: `\.css$`}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-				if strings.Contains(args.Importer, "node_modules") {
+				// Only handle relative CSS imports (./foo.css, ../foo.css).
+				// Non-relative specifiers (e.g. @scope/pkg/styles.css) are
+				// left to esbuild's default resolution.
+				if !strings.HasPrefix(args.Path, "./") && !strings.HasPrefix(args.Path, "../") {
 					return api.OnResolveResult{}, nil
 				}
 				// Use ResolveDir as fallback for stdin builds where

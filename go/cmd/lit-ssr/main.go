@@ -110,7 +110,19 @@ func createRenderer(ctx context.Context, skipBundle, dir string, args []string) 
 		return nil, fmt.Errorf("no component files specified. Usage: lit-ssr [--skip-bundle file.js | --dir ./components/ | file1.ts file2.ts ...]")
 	}
 
-	return litssr.NewFromFiles(ctx, files, 1)
+	// Deduplicate (--dir and positional args may overlap)
+	seen := make(map[string]struct{}, len(files))
+	deduped := files[:0]
+	for _, f := range files {
+		abs, _ := filepath.Abs(f)
+		if _, ok := seen[abs]; ok {
+			continue
+		}
+		seen[abs] = struct{}{}
+		deduped = append(deduped, f)
+	}
+
+	return litssr.NewFromFiles(ctx, deduped, 1)
 }
 
 func splitNul(data []byte, atEOF bool) (advance int, token []byte, err error) {

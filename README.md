@@ -121,14 +121,50 @@ func main() {
 
 ### API
 
+#### Creating a renderer
+
 | Function | Description |
 |---|---|
 | `NewFromFiles(ctx, files, workers)` | Bundle source files with esbuild and create a renderer pool. Handles TS, CSS imports, lit shims. |
 | `New(ctx, source, workers)` | Create a renderer pool from pre-bundled JS. No esbuild. |
 | `NewWithElements(ctx, source, elements, workers)` | Like `New` but with an explicit element list. |
+| `NewFromBytecode(ctx, bytecode, elements, workers)` | Create a renderer pool from pre-compiled QuickJS bytecode. Fastest init. |
+
+#### Bytecode compilation
+
+| Function | Description |
+|---|---|
+| `CompileSource(ctx, source)` | Compile pre-bundled JS to QuickJS bytecode. |
+| `CompileFiles(ctx, files)` | Bundle source files with esbuild and compile to bytecode. |
+
+#### Rendering
+
+| Function | Description |
+|---|---|
 | `RenderHTML(ctx, html)` | Render HTML with DSD. Concurrent-safe. |
 | `RenderBatch(ctx, inputs)` | Batch render across workers. Ordered results. |
 | `Close(ctx)` | Shut down workers and release resources. |
+
+### Which constructor to use
+
+- **`NewFromFiles`** -- simplest option. Pass your `.ts`/`.js` source files
+  and esbuild handles bundling. Good for most use cases.
+- **`New` / `NewWithElements`** -- you already have a bundled JS string (e.g.
+  from your own build pipeline). Skips esbuild.
+- **`NewFromBytecode`** -- fastest worker init (~2.5x faster). Pre-compile
+  your source to QuickJS bytecode once with `CompileSource`/`CompileFiles`,
+  cache the bytecode, and reuse it across server restarts. Best for large
+  bundles or many workers where init time matters.
+
+```go
+// Pre-compiled bytecode example
+bytecode, err := litssr.CompileFiles(ctx, []string{"src/components.ts"})
+// cache bytecode to disk if desired:
+// os.WriteFile("ssr-bundle.qbc", bytecode, 0o644)
+
+elements := []string{"my-card", "my-alert"}
+renderer, err := litssr.NewFromBytecode(ctx, bytecode, elements, 0)
+```
 
 ### Performance
 
@@ -136,6 +172,7 @@ func main() {
 |---|---|
 | WASM module size | ~2 MB |
 | Cold start (pool init) | ~350ms |
+| Cold start (bytecode) | ~150ms |
 | Warm render (single) | ~0.32ms |
 | Batch of 50 | ~1ms total |
 | Go dependency | [wazero][wazero] only (pure Go, no CGo) |
@@ -193,6 +230,14 @@ stdout: \0  (ack)
 
 The WASM evaluates the component source and registers custom elements.
 
+In **bytecode mode**, the source is already compiled into the bytecode, so the
+init message only contains elements:
+
+```
+stdin:  {"elements":["my-el","my-other"]}\n
+stdout: \0  (ack)
+```
+
 ### Phase 2: Render (per request)
 
 ```
@@ -220,7 +265,8 @@ lit-ssr-wasm/
 |   |   +-- javy.ts               # Javy.IO for WASM
 |   |   +-- node.ts               # node:fs for Node.js
 |   +-- components/               # Demo components (x-card, my-alert, etc.)
-|   +-- runtime-entry.ts          # WASM entry: shims + read loop
+|   +-- runtime-entry.ts          # WASM entry: shims + eval + read loop
+|   +-- bytecode-entry.ts         # Bytecode entry: shims + placeholder + read loop
 |   +-- demo-entry.ts             # Demo site entry (components baked in)
 |   +-- ssr-css-fix.ts            # CSSStyleSheet.prototype.cssText patch
 |   +-- esbuild-plugin.ts         # litSsrWasmPlugin for consumers
@@ -232,6 +278,7 @@ lit-ssr-wasm/
 |   +-- dev-server.ts             # Live-reloading dev server
 +-- go/
 |   +-- litssr.go                 # Go package: worker pool using wazero
+|   +-- bytecode.go               # Bytecode compilation + loading via Javy plugin
 |   +-- litssr_test.go            # Tests + benchmarks
 |   +-- cmd/lit-ssr/              # CLI binary
 |   +-- testdata/                 # Test components + golden fixtures

@@ -5,26 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
 )
-
-// importExportRe detects top-level import/export statements that indicate
-// unbundled ES module source needing bundling before eval.
-var importExportRe = regexp.MustCompile(`(?m)^(?:import\s|export\s)`)
-
-// tsSyntaxRe detects TypeScript-only syntax (type, interface, enum
-// declarations) that QuickJS cannot execute without compilation.
-var tsSyntaxRe = regexp.MustCompile(`(?m)^\s*(?:type|interface|enum)\s+\w+`)
-
-// needsBundle returns true if the source contains ES module syntax or
-// TypeScript-only syntax, indicating it needs to be compiled/bundled
-// before eval in QuickJS.
-func needsBundle(source string) bool {
-	return importExportRe.MatchString(source) || tsSyntaxRe.MatchString(source)
-}
 
 // bundleSource bundles JavaScript/TypeScript source into a self-contained
 // script suitable for eval in the lit-ssr-wasm runtime. If resolveDir is

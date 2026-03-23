@@ -11,19 +11,6 @@ import (
 //go:embed testdata/unbundled-component.ts
 var unbundledFixture string
 
-func TestNeedsBundleWithImports(t *testing.T) {
-	if !needsBundle(unbundledFixture) {
-		t.Error("expected source with imports to need bundling")
-	}
-}
-
-func TestNeedsBundleAlreadyBundled(t *testing.T) {
-	// The pre-built test-components.js is already bundled
-	if needsBundle(testSource) {
-		t.Error("expected bundled source to not need bundling")
-	}
-}
-
 func TestBundleSource(t *testing.T) {
 	resolveDir, err := filepath.Abs("testdata")
 	if err != nil {
@@ -76,22 +63,23 @@ func TestBundleFilesCSS(t *testing.T) {
 	}
 }
 
-func TestNewFromUnbundledSource(t *testing.T) {
-	r, err := New(context.Background(), unbundledFixture, 1)
+func TestBundleSourceExportStripped(t *testing.T) {
+	resolveDir, err := filepath.Abs("testdata")
 	if err != nil {
-		t.Fatalf("New with unbundled source: %v", err)
+		t.Fatalf("filepath.Abs: %v", err)
 	}
-	t.Cleanup(func() { r.Close(context.Background()) })
+	src := `import { LitElement, html } from 'lit';
+export class Foo extends LitElement {
+  render() { return html` + "`<p>hi</p>`" + `; }
+}
+customElements.define('foo-el', Foo);`
 
-	out, err := r.RenderHTML(context.Background(), `<unbundled-el></unbundled-el>`)
+	bundled, err := bundleSource(src, resolveDir)
 	if err != nil {
-		t.Fatalf("RenderHTML: %v", err)
+		t.Fatalf("bundleSource: %v", err)
 	}
-	if !strings.Contains(out, `shadowrootmode="open"`) {
-		t.Error("missing DSD in output")
-	}
-	if !strings.Contains(out, "unbundled") {
-		t.Error("missing rendered content")
+	if strings.Contains(bundled, "\nexport ") {
+		t.Error("bundled output should not contain export statements (eval can't handle them)")
 	}
 }
 
@@ -143,27 +131,5 @@ func TestNewFromFilesCSS(t *testing.T) {
 	}
 	if !strings.Contains(out, "color: green") {
 		t.Error("CSS should be in rendered output")
-	}
-}
-
-func TestBundleSourceExportStripped(t *testing.T) {
-	// Verify that exports in raw source are stripped by esbuild,
-	// since the output is eval'd (not imported as a module).
-	resolveDir, err := filepath.Abs("testdata")
-	if err != nil {
-		t.Fatalf("filepath.Abs: %v", err)
-	}
-	src := `import { LitElement, html } from 'lit';
-export class Foo extends LitElement {
-  render() { return html` + "`<p>hi</p>`" + `; }
-}
-customElements.define('foo-el', Foo);`
-
-	bundled, err := bundleSource(src, resolveDir)
-	if err != nil {
-		t.Fatalf("bundleSource: %v", err)
-	}
-	if strings.Contains(bundled, "\nexport ") {
-		t.Error("bundled output should not contain export statements (eval can't handle them)")
 	}
 }

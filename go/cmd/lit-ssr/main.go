@@ -87,7 +87,10 @@ func createRenderer(ctx context.Context, bundle, dir string, args []string) (*li
 			return nil, fmt.Errorf("%s is not a directory", dir)
 		}
 		for _, pattern := range []string{"*.ts", "*.js"} {
-			matches, _ := filepath.Glob(filepath.Join(dir, pattern))
+			matches, err := filepath.Glob(filepath.Join(dir, pattern))
+			if err != nil {
+				return nil, fmt.Errorf("glob %s: %w", pattern, err)
+			}
 			files = append(files, matches...)
 		}
 		if len(files) == 0 {

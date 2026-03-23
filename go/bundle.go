@@ -160,7 +160,13 @@ func litCSSPlugin() api.Plugin {
 				if strings.Contains(args.Importer, "node_modules") {
 					return api.OnResolveResult{}, nil
 				}
-				absPath := filepath.Join(filepath.Dir(args.Importer), args.Path)
+				// Use ResolveDir as fallback for stdin builds where
+				// Importer is a synthetic filename, not a real path.
+				base := filepath.Dir(args.Importer)
+				if args.ResolveDir != "" {
+					base = args.ResolveDir
+				}
+				absPath := filepath.Join(base, args.Path)
 				return api.OnResolveResult{
 					Path:      absPath,
 					Namespace: "lit-css",

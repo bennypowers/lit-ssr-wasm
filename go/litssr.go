@@ -107,6 +107,8 @@ type Renderer struct {
 // for lit-ssr-wasm compatibility). Pre-bundled source is used as-is.
 // Element tag names are extracted via regex. For minified bundles
 // or decorator-based registration, use NewWithElements instead.
+// For source with relative imports (e.g., ./styles.css), prefer
+// NewFromFiles which resolves imports relative to the source files.
 // If workers is 0, defaults to runtime.NumCPU().
 func New(ctx context.Context, componentSource string, workers int) (*Renderer, error) {
 	source, err := ensureBundled(componentSource)

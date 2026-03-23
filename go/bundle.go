@@ -152,8 +152,8 @@ func litCSSPlugin() api.Plugin {
 				if !strings.HasPrefix(args.Path, "./") && !strings.HasPrefix(args.Path, "../") {
 					return api.OnResolveResult{}, nil
 				}
-				// Use ResolveDir as fallback for stdin builds where
-				// Importer is a synthetic filename, not a real path.
+				// Prefer ResolveDir (set by esbuild for both stdin and
+				// file builds), fall back to Importer's directory.
 				base := filepath.Dir(args.Importer)
 				if args.ResolveDir != "" {
 					base = args.ResolveDir

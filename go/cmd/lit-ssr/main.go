@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	litssr "github.com/bennypowers/lit-ssr-wasm/go"
+	litssr "bennypowers.dev/lit-ssr-wasm/go"
 )
 
 func main() {

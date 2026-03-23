@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	litssr "github.com/bennypowers/lit-ssr-wasm/go"
+	litssr "bennypowers.dev/lit-ssr-wasm/go"
 )
 
 //go:embed test-components.js

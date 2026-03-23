@@ -1,4 +1,4 @@
-module github.com/bennypowers/lit-ssr-wasm/go
+module bennypowers.dev/lit-ssr-wasm/go
 
 go 1.25.5
 

@@ -22,15 +22,18 @@ WASI shim.
 
 ## How It Works
 
-1. **Bundle** your LitElement components with [esbuild][esbuild], using the
-   provided `litSsrWasmPlugin` to bridge `@lit-labs/ssr-dom-shim` to the
-   WASM runtime's globals
-2. **Pass** the bundled JS to the Go library or CLI
+1. **Point** the Go library or CLI at your component source files (TS or JS)
+2. **esbuild** bundles them automatically with the correct Lit SSR plugins
 3. **Pipe** HTML to stdin, get DSD-enhanced HTML from stdout
 
 The WASM module provides the SSR environment (DOM shims, `@lit-labs/ssr` render
-engine, `btoa`/`atob`, `URL`, `CSS`, etc.). Your bundle provides Lit and your
-component definitions.
+engine, `btoa`/`atob`, `URL`, `CSS`, etc.). esbuild bundles Lit and your
+component definitions into a self-contained script.
+
+> **Note:** JavaScript dependencies referenced by your components (e.g. `lit`,
+> `@lit-labs/*`) must be installed and resolvable via `node_modules`. The Go
+> library and CLI do not install npm packages; they only bundle what esbuild
+> can find on disk.
 
 ### Declarative Shadow DOM
 
@@ -78,7 +81,6 @@ import (
     "context"
     "fmt"
     "log"
-    "os"
 
     litssr "github.com/bennypowers/lit-ssr-wasm/go"
 )
@@ -86,14 +88,11 @@ import (
 func main() {
     ctx := context.Background()
 
-    // Read your pre-bundled component JS
-    source, err := os.ReadFile("components.js")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // Start a renderer pool (0 = one worker per CPU core)
-    renderer, err := litssr.New(ctx, string(source), 0)
+    // From source files (esbuild bundles automatically)
+    renderer, err := litssr.NewFromFiles(ctx, []string{
+        "src/my-card.ts",
+        "src/my-alert.ts",
+    }, 0)
     if err != nil {
         log.Fatal(err)
     }
@@ -124,8 +123,9 @@ func main() {
 
 | Function | Description |
 |---|---|
-| `New(ctx, source, workers)` | Create a renderer pool. Extracts element names from source via regex. 0 workers = `runtime.NumCPU()`. |
-| `NewWithElements(ctx, source, elements, workers)` | Create a renderer pool with an explicit element list. |
+| `NewFromFiles(ctx, files, workers)` | Bundle source files with esbuild and create a renderer pool. Handles TS, CSS imports, lit shims. |
+| `New(ctx, source, workers)` | Create a renderer pool from pre-bundled JS. No esbuild. |
+| `NewWithElements(ctx, source, elements, workers)` | Like `New` but with an explicit element list. |
 | `RenderHTML(ctx, html)` | Render HTML with DSD. Concurrent-safe. |
 | `RenderBatch(ctx, inputs)` | Batch render across workers. Ordered results. |
 | `Close(ctx)` | Shut down workers and release resources. |
@@ -144,61 +144,23 @@ func main() {
 
 ## CLI
 
-A single `lit-ssr` binary accepts component JS via `--bundle`, `--dir`, or
-`--components` flags. It reads NUL-terminated HTML from stdin and writes
-NUL-terminated rendered HTML to stdout.
+The `lit-ssr` binary accepts component source files as positional arguments,
+or via `--dir` / `--skip-bundle`. Source files are bundled automatically with
+esbuild. It reads NUL-terminated HTML from stdin and writes NUL-terminated
+rendered HTML to stdout.
 
 ```sh
-lit-ssr --bundle components.js
+# Source files (bundled automatically with esbuild)
+lit-ssr src/my-card.ts src/my-alert.ts
+
+# Directory of source files
 lit-ssr --dir ./components/
-lit-ssr --components ./js/my-card.js --components ./js/my-alert.js
+
+# Pre-built bundle (skips esbuild)
+lit-ssr --skip-bundle dist/components.js
 ```
 
 The NUL-delimited protocol is transparent to callers (e.g. PHP, Ruby).
-
----
-
-## Bundling Components
-
-Consumers bundle their components with [esbuild][esbuild] using two provided
-plugins:
-
-### `litSsrWasmPlugin()`
-
-Resolves `@lit-labs/ssr-dom-shim` imports to `globalThis` re-exports, so the
-consumer's Lit copy shares the same `customElements` registry and DOM shims
-that the WASM runtime provides.
-
-### `stubNodeBuiltins`
-
-Stubs Node.js built-in modules (`fs`, `path`, `buffer`, etc.) for the QuickJS
-environment. The `Buffer.from(s, 'binary').toString('base64')` path delegates
-to `globalThis.btoa` for correct hydration digest computation.
-
-### Example build script
-
-The plugins are in `src/esbuild-plugin.ts` and `src/esbuild-stubs.ts`. Copy
-them into your project or reference by path:
-
-```typescript
-import * as esbuild from 'esbuild';
-import { litSsrWasmPlugin } from './path/to/esbuild-plugin.ts';
-import { stubNodeBuiltins } from './path/to/esbuild-stubs.ts';
-
-// Entry point should NOT export anything -- just define and register
-// components. esbuild's ESM format is fine as long as the entry has
-// no top-level exports (eval does not support import/export syntax).
-await esbuild.build({
-  entryPoints: ['src/components/index.ts'],
-  outfile: 'dist/components.js',
-  bundle: true,
-  format: 'esm',
-  target: 'es2022',
-  platform: 'node',
-  conditions: ['node'],
-  plugins: [litSsrWasmPlugin(), stubNodeBuiltins],
-});
-```
 
 ### SSR environment provided by the runtime
 

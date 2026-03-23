@@ -1,15 +1,15 @@
 // lit-ssr is a CLI for server-rendering Lit web components via WASM.
 //
-// Component definitions are loaded from JavaScript files at startup.
-// It reads NUL-terminated HTML from stdin, renders each with Declarative
-// Shadow DOM, and writes NUL-terminated results to stdout. The WASM
-// instance stays warm across renders.
+// Component definitions are loaded from JS/TS files at startup and
+// automatically bundled with esbuild. It reads NUL-terminated HTML from
+// stdin, renders each with Declarative Shadow DOM, and writes
+// NUL-terminated results to stdout.
 //
 // Usage:
 //
-//	lit-ssr --bundle components.js
+//	lit-ssr src/my-card.ts src/my-alert.ts
 //	lit-ssr --dir ./components/
-//	lit-ssr --components ./js/my-card.js --components ./js/my-alert.js
+//	lit-ssr --skip-bundle dist/components.js
 package main
 
 import (
@@ -24,41 +24,24 @@ import (
 	litssr "github.com/bennypowers/lit-ssr-wasm/go"
 )
 
-// stringSlice implements flag.Value for repeated --components flags.
-type stringSlice []string
-
-func (s *stringSlice) String() string { return strings.Join(*s, ", ") }
-func (s *stringSlice) Set(v string) error {
-	*s = append(*s, v)
-	return nil
-}
-
 func main() {
-	var bundle string
-	var components stringSlice
-	var componentDir string
-	flag.StringVar(&bundle, "bundle", "", "path to a pre-built JS bundle (recommended)")
-	flag.Var(&components, "components", "path to a standalone JS file with no import/export (repeatable)")
-	flag.StringVar(&componentDir, "dir", "", "directory of standalone JS files (no import/export)")
+	var skipBundle string
+	var dir string
+	flag.StringVar(&skipBundle, "skip-bundle", "", "path to a pre-bundled JS file (skips esbuild)")
+	flag.StringVar(&dir, "dir", "", "directory of component source files (*.ts, *.js)")
 	flag.Parse()
-
-	source, err := loadSource(bundle, componentDir, components)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "lit-ssr: %v\n", err)
-		os.Exit(1)
-	}
 
 	ctx := context.Background()
 
-	renderer, err := litssr.New(ctx, source, 1)
+	renderer, err := createRenderer(ctx, skipBundle, dir, flag.Args())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "lit-ssr: init failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "lit-ssr: %v\n", err)
 		os.Exit(1)
 	}
 	defer renderer.Close(ctx)
 
 	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024) // up to 10MB
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 	scanner.Split(splitNul)
 
 	for scanner.Scan() {
@@ -81,55 +64,70 @@ func main() {
 	}
 }
 
-func loadSource(bundle, dir string, components []string) (string, error) {
-	if bundle != "" {
-		if dir != "" || len(components) > 0 {
-			return "", fmt.Errorf("--bundle is mutually exclusive with --dir and --components")
+func createRenderer(ctx context.Context, skipBundle, dir string, args []string) (*litssr.Renderer, error) {
+	// --skip-bundle: pre-bundled JS, no esbuild
+	if skipBundle != "" {
+		if dir != "" || len(args) > 0 {
+			return nil, fmt.Errorf("--skip-bundle is mutually exclusive with --dir and positional args")
 		}
-		data, err := os.ReadFile(bundle)
+		data, err := os.ReadFile(skipBundle)
 		if err != nil {
-			return "", fmt.Errorf("read bundle %s: %w", bundle, err)
+			return nil, fmt.Errorf("read %s: %w", skipBundle, err)
 		}
-		return string(data), nil
+		return litssr.New(ctx, string(data), 1)
 	}
 
-	var jsFiles []string
+	// Collect files from --dir and/or positional args
+	var files []string
 	if dir != "" {
 		info, err := os.Stat(dir)
 		if err != nil {
-			return "", fmt.Errorf("dir %s: %w", dir, err)
+			return nil, fmt.Errorf("dir %s: %w", dir, err)
 		}
 		if !info.IsDir() {
-			return "", fmt.Errorf("%s is not a directory", dir)
+			return nil, fmt.Errorf("%s is not a directory", dir)
 		}
-		matches, err := filepath.Glob(filepath.Join(dir, "*.js"))
-		if err != nil {
-			return "", fmt.Errorf("glob error: %w", err)
+		for _, pattern := range []string{"*.ts", "*.js"} {
+			matches, err := filepath.Glob(filepath.Join(dir, pattern))
+			if err != nil {
+				return nil, fmt.Errorf("glob %s: %w", pattern, err)
+			}
+			for _, m := range matches {
+				// Skip declaration files and test files
+				if strings.HasSuffix(m, ".d.ts") || strings.HasSuffix(m, ".test.ts") || strings.HasSuffix(m, ".test.js") {
+					continue
+				}
+				files = append(files, m)
+			}
 		}
-		if len(matches) == 0 {
-			return "", fmt.Errorf("no .js files found in %s", dir)
+		if len(files) == 0 {
+			return nil, fmt.Errorf("no .ts or .js files found in %s", dir)
 		}
-		jsFiles = append(jsFiles, matches...)
 	}
-	jsFiles = append(jsFiles, components...)
+	files = append(files, args...)
 
-	if len(jsFiles) == 0 {
-		return "", fmt.Errorf("no component files specified. Use --bundle, --dir, or --components")
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no component files specified. Usage: lit-ssr [--skip-bundle file.js | --dir ./components/ | file1.ts file2.ts ...]")
 	}
 
-	var sb strings.Builder
-	for _, f := range jsFiles {
-		data, err := os.ReadFile(f)
+	// Deduplicate (--dir and positional args may overlap)
+	seen := make(map[string]struct{}, len(files))
+	deduped := files[:0]
+	for _, f := range files {
+		abs, err := filepath.Abs(f)
 		if err != nil {
-			return "", fmt.Errorf("read %s: %w", f, err)
+			abs = f
 		}
-		sb.Write(data)
-		sb.WriteString(";\n")
+		if _, ok := seen[abs]; ok {
+			continue
+		}
+		seen[abs] = struct{}{}
+		deduped = append(deduped, f)
 	}
-	return sb.String(), nil
+
+	return litssr.NewFromFiles(ctx, deduped, 1)
 }
 
-// splitNul is a bufio.SplitFunc that splits on NUL bytes.
 func splitNul(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	for i, b := range data {
 		if b == 0 {

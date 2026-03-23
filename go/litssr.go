@@ -127,7 +127,7 @@ func NewFromFiles(ctx context.Context, files []string, workers int) (*Renderer, 
 	}
 	elements := extractElements(source)
 	if len(elements) == 0 {
-		return nil, fmt.Errorf("litssr: no customElements.define() calls found in bundled source")
+		return nil, fmt.Errorf("litssr: no customElements.define() calls found in bundled source; use NewWithElements for decorator-based or minified bundles")
 	}
 	return createRenderer(ctx, source, elements, workers)
 }

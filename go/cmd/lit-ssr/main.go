@@ -114,7 +114,10 @@ func createRenderer(ctx context.Context, skipBundle, dir string, args []string) 
 	seen := make(map[string]struct{}, len(files))
 	deduped := files[:0]
 	for _, f := range files {
-		abs, _ := filepath.Abs(f)
+		abs, err := filepath.Abs(f)
+		if err != nil {
+			abs = f
+		}
 		if _, ok := seen[abs]; ok {
 			continue
 		}

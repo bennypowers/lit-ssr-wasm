@@ -140,7 +140,7 @@ func main() {
 ## CLI
 
 The `lit-ssr` binary accepts component source files as positional arguments,
-or via `--dir` / `--bundle`. Source files are bundled automatically with
+or via `--dir` / `--skip-bundle`. Source files are bundled automatically with
 esbuild. It reads NUL-terminated HTML from stdin and writes NUL-terminated
 rendered HTML to stdout.
 
@@ -152,7 +152,7 @@ lit-ssr src/my-card.ts src/my-alert.ts
 lit-ssr --dir ./components/
 
 # Pre-built bundle (skips esbuild)
-lit-ssr --bundle dist/components.js
+lit-ssr --skip-bundle dist/components.js
 ```
 
 The NUL-delimited protocol is transparent to callers (e.g. PHP, Ruby).

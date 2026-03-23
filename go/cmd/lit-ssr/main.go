@@ -7,9 +7,9 @@
 //
 // Usage:
 //
-//	lit-ssr --bundle components.js
-//	lit-ssr --dir ./components/
 //	lit-ssr src/my-card.ts src/my-alert.ts
+//	lit-ssr --dir ./components/
+//	lit-ssr --skip-bundle dist/components.js
 package main
 
 import (
@@ -24,15 +24,15 @@ import (
 )
 
 func main() {
-	var bundle string
+	var skipBundle string
 	var dir string
-	flag.StringVar(&bundle, "bundle", "", "path to a pre-built JS bundle (skips esbuild)")
+	flag.StringVar(&skipBundle, "skip-bundle", "", "path to a pre-bundled JS file (skips esbuild)")
 	flag.StringVar(&dir, "dir", "", "directory of component source files (*.ts, *.js)")
 	flag.Parse()
 
 	ctx := context.Background()
 
-	renderer, err := createRenderer(ctx, bundle, dir, flag.Args())
+	renderer, err := createRenderer(ctx, skipBundle, dir, flag.Args())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "lit-ssr: %v\n", err)
 		os.Exit(1)
@@ -63,15 +63,15 @@ func main() {
 	}
 }
 
-func createRenderer(ctx context.Context, bundle, dir string, args []string) (*litssr.Renderer, error) {
-	// --bundle: pre-built JS, no esbuild needed
-	if bundle != "" {
+func createRenderer(ctx context.Context, skipBundle, dir string, args []string) (*litssr.Renderer, error) {
+	// --skip-bundle: pre-bundled JS, no esbuild
+	if skipBundle != "" {
 		if dir != "" || len(args) > 0 {
-			return nil, fmt.Errorf("--bundle is mutually exclusive with --dir and positional args")
+			return nil, fmt.Errorf("--skip-bundle is mutually exclusive with --dir and positional args")
 		}
-		data, err := os.ReadFile(bundle)
+		data, err := os.ReadFile(skipBundle)
 		if err != nil {
-			return nil, fmt.Errorf("read bundle %s: %w", bundle, err)
+			return nil, fmt.Errorf("read %s: %w", skipBundle, err)
 		}
 		return litssr.New(ctx, string(data), 1)
 	}
@@ -100,7 +100,7 @@ func createRenderer(ctx context.Context, bundle, dir string, args []string) (*li
 	files = append(files, args...)
 
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no component files specified. Usage: lit-ssr [--bundle file.js | --dir ./components/ | file1.ts file2.ts ...]")
+		return nil, fmt.Errorf("no component files specified. Usage: lit-ssr [--skip-bundle file.js | --dir ./components/ | file1.ts file2.ts ...]")
 	}
 
 	return litssr.NewFromFiles(ctx, files, 1)

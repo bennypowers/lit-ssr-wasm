@@ -193,7 +193,9 @@ func (r *Renderer) startBytecodeWorker(ctx context.Context, bytecode []byte, ele
 		WithStdout(stdoutW).
 		WithStderr(stderr)
 
+	r.wasmWg.Add(1)
 	go func() {
+		defer r.wasmWg.Done()
 		mod, err := r.runtime.InstantiateModule(ctx, r.compiled, cfg)
 		if err != nil {
 			_ = stdinR.CloseWithError(err)

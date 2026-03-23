@@ -102,7 +102,8 @@ type Renderer struct {
 	compiled wazero.CompiledModule
 	workers  []*worker
 	work     chan request
-	wg       sync.WaitGroup
+	wg       sync.WaitGroup // tracks runWorker goroutines
+	wasmWg   sync.WaitGroup // tracks WASM instance goroutines
 }
 
 // New creates a renderer pool from pre-bundled JavaScript.
@@ -216,7 +217,9 @@ func (r *Renderer) startWorker(ctx context.Context, source string, elements []st
 		WithStdout(stdoutW).
 		WithStderr(stderr)
 
+	r.wasmWg.Add(1)
 	go func() {
+		defer r.wasmWg.Done()
 		_, err := r.runtime.InstantiateModule(ctx, r.compiled, cfg)
 		if err != nil {
 			// Close stdin so w.init() gets an error instead of blocking.
@@ -352,10 +355,11 @@ func (r *Renderer) RenderBatch(ctx context.Context, inputs []string) ([]string, 
 
 // Close shuts down all workers and releases resources.
 func (r *Renderer) Close(ctx context.Context) error {
-	for _, w := range r.workers {
-		w.stdin.Close()
-	}
 	close(r.work)
-	r.wg.Wait()
+	r.wg.Wait() // wait for runWorker goroutines to drain
+	for _, w := range r.workers {
+		w.stdin.Close() // EOF causes WASM to exit its read loop
+	}
+	r.wasmWg.Wait() // wait for WASM instances to finish
 	return r.runtime.Close(ctx)
 }

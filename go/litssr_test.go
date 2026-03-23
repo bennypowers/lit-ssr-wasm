@@ -173,6 +173,21 @@ func TestConcurrent(t *testing.T) {
 	}
 }
 
+func TestCloseRace(t *testing.T) {
+	// Reproduces issue #7: Close() races with WASM I/O goroutines.
+	// Run with -race to verify.
+	for range 10 {
+		r, err := New(context.Background(), testSource, 2)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		// Close immediately without rendering -- workers are blocked on stdin.
+		if err := r.Close(context.Background()); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	}
+}
+
 func BenchmarkNew(b *testing.B) {
 	ctx := context.Background()
 	for range b.N {

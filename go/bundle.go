@@ -25,14 +25,14 @@ func bundleSource(source, resolveDir string) (string, error) {
 	nodePaths := findNodeModules(resolveDir)
 
 	result := api.Build(ssrBuildOptions(api.StdinOptions{
-		Contents:   stripImportAttributes(source),
+		Contents:   source,
 		Sourcefile: "components.ts",
 		Loader:     api.LoaderTS,
 		ResolveDir: resolveDir,
 	}, nodePaths))
 
 	if len(result.Errors) > 0 {
-		msgs := api.FormatMessages(result.Errors, api.FormatMessagesOptions{})
+		msgs := api.FormatMessages(result.Errors, api.FormatMessagesOptions{TerminalWidth: 80})
 		return "", fmt.Errorf("litssr: bundle: %s", strings.Join(msgs, "\n"))
 	}
 
@@ -212,16 +212,3 @@ export const readFileSync = () => "";`
 	}
 }
 
-// stripImportAttributes removes `with { type: 'css' }` from import
-// statements. Modern esbuild (0.27+) handles import attributes natively,
-// but this normalizes stdin source for compatibility.
-func stripImportAttributes(source string) string {
-	result := source
-	for _, pattern := range []string{
-		` with { type: 'css' }`,
-		` with { type: "css" }`,
-	} {
-		result = strings.ReplaceAll(result, pattern, "")
-	}
-	return result
-}

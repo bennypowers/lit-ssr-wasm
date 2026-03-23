@@ -2,58 +2,66 @@ package litssr
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
-	"os"
-	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
 
-//go:embed testdata/test-components.js
-var testSource string
-
-func newRenderer(t *testing.T) *Renderer {
-	t.Helper()
-	r, err := New(context.Background(), testSource, 2)
+func TestCompileSource(t *testing.T) {
+	ctx := context.Background()
+	bytecode, err := CompileSource(ctx, testSource)
 	if err != nil {
-		t.Fatalf("New: %v", err)
+		t.Fatalf("CompileSource: %v", err)
+	}
+	if len(bytecode) == 0 {
+		t.Fatal("CompileSource returned empty bytecode")
+	}
+}
+
+func TestCompileFiles(t *testing.T) {
+	ctx := context.Background()
+	bytecode, err := CompileFiles(ctx, []string{"testdata/unbundled-component.ts"})
+	if err != nil {
+		t.Fatalf("CompileFiles: %v", err)
+	}
+	if len(bytecode) == 0 {
+		t.Fatal("CompileFiles returned empty bytecode")
+	}
+
+	r, err := NewFromBytecode(ctx, bytecode, []string{"unbundled-el"}, 1)
+	if err != nil {
+		t.Fatalf("NewFromBytecode: %v", err)
+	}
+	defer r.Close(ctx)
+
+	out, err := r.RenderHTML(ctx, `<unbundled-el></unbundled-el>`)
+	if err != nil {
+		t.Fatalf("RenderHTML: %v", err)
+	}
+	if !strings.Contains(out, `shadowrootmode="open"`) {
+		t.Error("missing DSD in output")
+	}
+}
+
+func bytecodeRenderer(t *testing.T) *Renderer {
+	t.Helper()
+	ctx := context.Background()
+	bytecode, err := CompileSource(ctx, testSource)
+	if err != nil {
+		t.Fatalf("CompileSource: %v", err)
+	}
+	elements := extractElements(testSource)
+	r, err := NewFromBytecode(ctx, bytecode, elements, 2)
+	if err != nil {
+		t.Fatalf("NewFromBytecode: %v", err)
 	}
 	t.Cleanup(func() { r.Close(context.Background()) })
 	return r
 }
 
-func golden(t *testing.T, name string) string {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join("testdata", name+".golden"))
-	if err != nil {
-		t.Fatalf("read golden %s: %v", name, err)
-	}
-	return string(data)
-}
-
-func TestExtractElements(t *testing.T) {
-	elements := extractElements(testSource)
-	want := []string{"test-card", "test-badge", "test-sheet"}
-	if len(elements) != len(want) {
-		t.Fatalf("got %d elements, want %d", len(elements), len(want))
-	}
-	for i, e := range elements {
-		if e != want[i] {
-			t.Errorf("element %d: got %q, want %q", i, e, want[i])
-		}
-	}
-}
-
-func TestNoDefines(t *testing.T) {
-	_, err := New(context.Background(), "// no components here", 1)
-	if err == nil {
-		t.Fatal("expected error for source with no customElements.define calls")
-	}
-}
-
-func TestCard(t *testing.T) {
-	r := newRenderer(t)
+func TestBytecodeCard(t *testing.T) {
+	r := bytecodeRenderer(t)
 	want := golden(t, "card")
 	got, err := r.RenderHTML(context.Background(), `<test-card><h2 slot="header">Hi</h2><p>Body</p></test-card>`)
 	if err != nil {
@@ -64,8 +72,8 @@ func TestCard(t *testing.T) {
 	}
 }
 
-func TestBadge(t *testing.T) {
-	r := newRenderer(t)
+func TestBytecodeBadge(t *testing.T) {
+	r := bytecodeRenderer(t)
 	want := golden(t, "badge")
 	got, err := r.RenderHTML(context.Background(), `<test-badge state="success">up</test-badge>`)
 	if err != nil {
@@ -76,8 +84,8 @@ func TestBadge(t *testing.T) {
 	}
 }
 
-func TestCSSStyleSheet(t *testing.T) {
-	r := newRenderer(t)
+func TestBytecodeCSSStyleSheet(t *testing.T) {
+	r := bytecodeRenderer(t)
 	want := golden(t, "sheet")
 	got, err := r.RenderHTML(context.Background(), `<test-sheet>styled</test-sheet>`)
 	if err != nil {
@@ -88,8 +96,8 @@ func TestCSSStyleSheet(t *testing.T) {
 	}
 }
 
-func TestPassthrough(t *testing.T) {
-	r := newRenderer(t)
+func TestBytecodePassthrough(t *testing.T) {
+	r := bytecodeRenderer(t)
 	want := golden(t, "passthrough")
 	got, err := r.RenderHTML(context.Background(), `<unknown-el>hello</unknown-el>`)
 	if err != nil {
@@ -100,24 +108,8 @@ func TestPassthrough(t *testing.T) {
 	}
 }
 
-func TestMultipleRenders(t *testing.T) {
-	r := newRenderer(t)
-	ctx := context.Background()
-	want := golden(t, "card")
-
-	for i := range 5 {
-		got, err := r.RenderHTML(ctx, `<test-card><h2 slot="header">Hi</h2><p>Body</p></test-card>`)
-		if err != nil {
-			t.Fatalf("render %d: %v", i, err)
-		}
-		if got != want {
-			t.Errorf("render %d: mismatch\ngot:\n%s\nwant:\n%s", i, got, want)
-		}
-	}
-}
-
-func TestBatch(t *testing.T) {
-	r := newRenderer(t)
+func TestBytecodeBatch(t *testing.T) {
+	r := bytecodeRenderer(t)
 	inputs := []string{
 		`<test-card><h2 slot="header">Hi</h2><p>Body</p></test-card>`,
 		`<test-badge state="success">up</test-badge>`,
@@ -143,8 +135,8 @@ func TestBatch(t *testing.T) {
 	}
 }
 
-func TestConcurrent(t *testing.T) {
-	r := newRenderer(t)
+func TestBytecodeConcurrent(t *testing.T) {
+	r := bytecodeRenderer(t)
 	ctx := context.Background()
 	want := golden(t, "card")
 
@@ -173,10 +165,27 @@ func TestConcurrent(t *testing.T) {
 	}
 }
 
-func BenchmarkNew(b *testing.B) {
+func BenchmarkCompileSource(b *testing.B) {
 	ctx := context.Background()
 	for range b.N {
-		r, err := New(ctx, testSource, 0)
+		_, err := CompileSource(ctx, testSource)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkNewFromBytecode(b *testing.B) {
+	ctx := context.Background()
+	bytecode, err := CompileSource(ctx, testSource)
+	if err != nil {
+		b.Fatal(err)
+	}
+	elements := extractElements(testSource)
+
+	b.ResetTimer()
+	for range b.N {
+		r, err := NewFromBytecode(ctx, bytecode, elements, 0)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -186,41 +195,24 @@ func BenchmarkNew(b *testing.B) {
 	}
 }
 
-func BenchmarkRenderHTML(b *testing.B) {
-	r, err := New(context.Background(), testSource, 0)
+func BenchmarkRenderHTMLBytecode(b *testing.B) {
+	ctx := context.Background()
+	bytecode, err := CompileSource(ctx, testSource)
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer r.Close(context.Background())
+	elements := extractElements(testSource)
+	r, err := NewFromBytecode(ctx, bytecode, elements, 0)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer r.Close(ctx)
 
-	ctx := context.Background()
 	input := `<test-card><h2 slot="header">Bench</h2><p>Body</p></test-card>`
 
 	b.ResetTimer()
 	for range b.N {
 		_, err := r.RenderHTML(ctx, input)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkRenderBatch(b *testing.B) {
-	r, err := New(context.Background(), testSource, 0)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer r.Close(context.Background())
-
-	ctx := context.Background()
-	inputs := make([]string, 50)
-	for i := range inputs {
-		inputs[i] = `<test-card><h2 slot="header">Bench</h2><p>Body</p></test-card>`
-	}
-
-	b.ResetTimer()
-	for range b.N {
-		_, err := r.RenderBatch(ctx, inputs)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -68,8 +68,11 @@ jobs:
       - run: npm ci
       - run: npm run build:wasm
 
-      - name: Copy WASM to go/
-        run: cp dist/lit-ssr-runtime.wasm go/lit-ssr-runtime.wasm
+      - name: Copy WASM and bytecode entry to go/
+        run: |
+          cp dist/lit-ssr-runtime.wasm go/lit-ssr-runtime.wasm
+          cp dist/lit-ssr-bytecode-entry.js go/lit-ssr-bytecode-entry.js
+          javy emit-plugin -o go/javy-plugin.wasm
 
       - name: Build ${{ matrix.platform }}
         working-directory: go

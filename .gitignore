@@ -3,3 +3,5 @@ dist/
 _site/
 .wireit/
 go/lit-ssr-runtime.wasm
+go/lit-ssr-bytecode-entry.js
+go/javy-plugin.wasm

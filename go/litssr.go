@@ -17,6 +17,11 @@
 //	defer renderer.Close(ctx)
 //
 //	html, err := renderer.RenderHTML(ctx, `<my-card>hello</my-card>`)
+//
+// For faster worker init, pre-compile source to QuickJS bytecode:
+//
+//	bytecode, _ := litssr.CompileSource(ctx, source)
+//	renderer, _ := litssr.NewFromBytecode(ctx, bytecode, elements, 0)
 package litssr
 
 import (

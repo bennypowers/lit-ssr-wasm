@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	litssr "github.com/bennypowers/lit-ssr-wasm/go"
 )
@@ -91,7 +92,13 @@ func createRenderer(ctx context.Context, skipBundle, dir string, args []string) 
 			if err != nil {
 				return nil, fmt.Errorf("glob %s: %w", pattern, err)
 			}
-			files = append(files, matches...)
+			for _, m := range matches {
+				// Skip declaration files and test files
+				if strings.HasSuffix(m, ".d.ts") || strings.HasSuffix(m, ".test.ts") || strings.HasSuffix(m, ".test.js") {
+					continue
+				}
+				files = append(files, m)
+			}
 		}
 		if len(files) == 0 {
 			return nil, fmt.Errorf("no .ts or .js files found in %s", dir)

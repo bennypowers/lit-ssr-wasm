@@ -2,7 +2,7 @@
  * Entry point for the Lit SSR WASM module (runtime mode).
  *
  * Two-phase protocol:
- *   1. Init:   JSON line {"source":"...","elements":[...]}\n -> ack \0
+ *   1. Init:   JSON line {"source":"..."}\n -> ack \0
  *   2. Render: NUL-terminated HTML -> NUL-terminated rendered HTML
  * Errors go to stderr. Exits cleanly at EOF.
  */
@@ -19,10 +19,8 @@ import { readLine, readUntilNul, writeStdout, writeStderr } from './io.js';
 const initLine = readLine();
 if (initLine === null) throw new Error('unexpected EOF before init');
 
-let known: Set<string>;
 try {
-  const init = JSON.parse(initLine) as { source: string; elements: string[] };
-  known = new Set(init.elements);
+  const init = JSON.parse(initLine) as { source: string };
   if (init.source) {
     (0, eval)(init.source);
   }
@@ -44,7 +42,7 @@ for (;;) {
   }
 
   try {
-    const output = processHTML(html, known);
+    const output = processHTML(html);
     writeStdout(output + '\0');
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

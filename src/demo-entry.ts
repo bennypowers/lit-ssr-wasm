@@ -21,19 +21,12 @@ import './components/x-tab-panel.js';
 import './components/x-badge.js';
 import './components/my-alert.js';
 
-const KNOWN_ELEMENTS = new Set([
-  'x-card', 'x-cta',
-  'x-tabs', 'x-tab', 'x-tab-panel',
-  'x-badge',
-  'my-alert',
-]);
-
 for (;;) {
   const input = readUntilNul();
   if (input === null) break;
 
   try {
-    const output = processHTML(input, KNOWN_ELEMENTS);
+    const output = processHTML(input);
     writeStdout(output + '\0');
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

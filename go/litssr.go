@@ -9,6 +9,14 @@
 // evaluates the JS source in QuickJS, registers custom elements, and
 // renders HTML with Declarative Shadow DOM.
 //
+// Custom element discovery happens inside the WASM runtime: any element
+// registered via customElements.define() is automatically rendered with
+// DSD. Unregistered elements pass through unchanged.
+//
+// Security: HTML input is passed through without sanitization. Callers
+// must ensure that input to RenderHTML and RenderBatch is trusted or
+// sanitized upstream to prevent XSS in the rendered output.
+//
 // Usage:
 //
 //	source, _ := os.ReadFile("components.js")
@@ -21,7 +29,7 @@
 // For faster worker init, pre-compile source to QuickJS bytecode:
 //
 //	bytecode, _ := litssr.CompileSource(ctx, source)
-//	renderer, _ := litssr.NewFromBytecode(ctx, bytecode, elements, 0)
+//	renderer, _ := litssr.NewFromBytecode(ctx, bytecode, 0)
 package litssr
 
 import (
@@ -31,7 +39,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -43,16 +50,9 @@ import (
 //go:embed lit-ssr-runtime.wasm
 var runtimeWasm []byte
 
-// Matches customElements.define('my-el', ...) calls. This is a property
-// access on a global, so it survives minification. The @customElement
-// decorator is NOT matched because minifiers rename the imported symbol.
-// Use NewWithElements for decorator-based or minified bundles.
-var defineRe = regexp.MustCompile(`customElements\.define\(\s*['"]([^'"]+)['"]`)
-
 // initRequest is sent once per worker to load component source.
 type initRequest struct {
-	Source   string   `json:"source"`
-	Elements []string `json:"elements"`
+	Source string `json:"source"`
 }
 
 // request is sent to a worker via its channel.
@@ -110,50 +110,26 @@ type Renderer struct {
 // componentSource must be ready to eval -- no import/export statements,
 // no TypeScript syntax. Use NewFromFiles to bundle source files
 // automatically with esbuild.
-// Element tag names are extracted via regex. For minified bundles
-// or decorator-based registration, use NewWithElements instead.
 // If workers is 0, defaults to runtime.NumCPU().
 func New(ctx context.Context, componentSource string, workers int) (*Renderer, error) {
-	elements := extractElements(componentSource)
-	if len(elements) == 0 {
-		return nil, fmt.Errorf("litssr: no customElements.define() calls found in source; use NewWithElements for decorator-based or minified bundles")
-	}
-	return createRenderer(ctx, componentSource, elements, workers)
+	return createRenderer(ctx, componentSource, workers)
 }
 
 // NewFromFiles bundles JS/TS source files with esbuild and creates
 // a renderer pool. Handles import/export statements, TypeScript,
 // CSS module imports, and lit-ssr-wasm shim bridging automatically.
-// Element tag names are extracted from the bundled output.
 // If workers is 0, defaults to runtime.NumCPU().
 func NewFromFiles(ctx context.Context, files []string, workers int) (*Renderer, error) {
 	source, err := bundleFiles(files)
 	if err != nil {
 		return nil, err
 	}
-	elements := extractElements(source)
-	if len(elements) == 0 {
-		return nil, fmt.Errorf("litssr: no customElements.define() calls found in bundled source; use NewWithElements for decorator-based or minified bundles")
-	}
-	return createRenderer(ctx, source, elements, workers)
+	return createRenderer(ctx, source, workers)
 }
 
-// NewWithElements creates a renderer pool from pre-bundled JavaScript
-// with an explicit element list. Use this when element tag names can't
-// be reliably extracted from the source (e.g., dynamic tag names or
-// nonstandard registration patterns).
-// If workers is 0, defaults to runtime.NumCPU().
-func NewWithElements(ctx context.Context, componentSource string, elements []string, workers int) (*Renderer, error) {
-	return createRenderer(ctx, componentSource, elements, workers)
-}
-
-func createRenderer(ctx context.Context, componentSource string, elements []string, workers int) (*Renderer, error) {
+func createRenderer(ctx context.Context, componentSource string, workers int) (*Renderer, error) {
 	if workers <= 0 {
 		workers = runtime.NumCPU()
-	}
-
-	if len(elements) == 0 {
-		return nil, fmt.Errorf("litssr: no elements provided")
 	}
 
 	rt := wazero.NewRuntime(ctx)
@@ -176,7 +152,7 @@ func createRenderer(ctx context.Context, componentSource string, elements []stri
 	}
 
 	for i := range workers {
-		w, err := r.startWorker(ctx, componentSource, elements, i)
+		w, err := r.startWorker(ctx, componentSource, i)
 		if err != nil {
 			r.Close(ctx)
 			return nil, fmt.Errorf("litssr: start worker %d: %w", i, err)
@@ -189,24 +165,7 @@ func createRenderer(ctx context.Context, componentSource string, elements []stri
 	return r, nil
 }
 
-// extractElements finds element tag names by matching
-// customElements.define('tag-name', ...) calls in the source.
-func extractElements(source string) []string {
-	matches := defineRe.FindAllStringSubmatch(source, -1)
-	seen := make(map[string]struct{}, len(matches))
-	elements := make([]string, 0, len(matches))
-	for _, m := range matches {
-		tag := m[1]
-		if _, ok := seen[tag]; ok {
-			continue
-		}
-		seen[tag] = struct{}{}
-		elements = append(elements, tag)
-	}
-	return elements
-}
-
-func (r *Renderer) startWorker(ctx context.Context, source string, elements []string, _ int) (*worker, error) {
+func (r *Renderer) startWorker(ctx context.Context, source string, _ int) (*worker, error) {
 	stdinR, stdinW := io.Pipe()
 	stdoutR, stdoutW := io.Pipe()
 	stderr := &stderrCollector{}
@@ -234,8 +193,7 @@ func (r *Renderer) startWorker(ctx context.Context, source string, elements []st
 		stderr: stderr,
 	}
 
-	// Send init message with source + elements once per worker.
-	if err := w.init(source, elements); err != nil {
+	if err := w.init(source); err != nil {
 		stdinW.Close()
 		return nil, err
 	}
@@ -243,11 +201,11 @@ func (r *Renderer) startWorker(ctx context.Context, source string, elements []st
 	return w, nil
 }
 
-// init sends the component source and element list to the WASM worker.
-// Called once per worker at startup. The WASM evals the source, registers
-// custom elements, and acks with \0.
-func (w *worker) init(source string, elements []string) error {
-	req := initRequest{Source: source, Elements: elements}
+// init sends the component source to the WASM worker.
+// Called once per worker at startup. The WASM evals the source,
+// registers custom elements, and acks with \0.
+func (w *worker) init(source string) error {
+	req := initRequest{Source: source}
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("litssr: marshal init: %w", err)
@@ -258,12 +216,11 @@ func (w *worker) init(source string, elements []string) error {
 		return fmt.Errorf("litssr: write init: %w", err)
 	}
 
-	// Wait for ack
-	ack, err := w.stdout.ReadString('\x00')
+	// Wait for ack (\0)
+	_, err = w.stdout.ReadString('\x00')
 	if err != nil {
 		return fmt.Errorf("litssr: read init ack: %w", err)
 	}
-	_ = ack
 
 	if errMsg := strings.TrimSpace(w.stderr.drain()); errMsg != "" {
 		return fmt.Errorf("litssr: init: %s", errMsg)
@@ -305,7 +262,8 @@ func (w *worker) render(inputHTML string) (string, error) {
 }
 
 // RenderHTML sends HTML to a worker and returns the rendered result.
-// Safe for concurrent use.
+// Safe for concurrent use. Input HTML is not sanitized; callers must
+// ensure it is trusted to prevent XSS.
 func (r *Renderer) RenderHTML(ctx context.Context, inputHTML string) (string, error) {
 	resp := make(chan response, 1)
 	select {
@@ -322,7 +280,8 @@ func (r *Renderer) RenderHTML(ctx context.Context, inputHTML string) (string, er
 }
 
 // RenderBatch renders multiple HTML strings, distributing across workers.
-// Returns results in the same order as inputs.
+// Returns results in the same order as inputs. Input HTML is not sanitized;
+// callers must ensure it is trusted to prevent XSS.
 func (r *Renderer) RenderBatch(ctx context.Context, inputs []string) ([]string, error) {
 	results := make([]string, len(inputs))
 	resps := make([]chan response, len(inputs))

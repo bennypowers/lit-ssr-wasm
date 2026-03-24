@@ -7,7 +7,7 @@
  * pre-compiled to QuickJS bytecode, skipping parse+compile per worker.
  *
  * Two-phase protocol:
- *   1. Init:   JSON line {"elements":[...]}\n -> ack \0
+ *   1. Init:   JSON line {}\n -> ack \0
  *   2. Render: NUL-terminated HTML -> NUL-terminated rendered HTML
  * Errors go to stderr. Exits cleanly at EOF.
  */
@@ -24,14 +24,12 @@ import { readLine, readUntilNul, writeStdout, writeStderr } from './io.js';
 // The placeholder below is replaced with a bundled IIFE.
 globalThis.__LITSSR_USER_SOURCE__ = true;
 
-// Phase 1: read init message (elements only, source already loaded above)
+// Phase 1: read init message (source already loaded above)
 const initLine = readLine();
 if (initLine === null) throw new Error('unexpected EOF before init');
 
-let known: Set<string>;
 try {
-  const init = JSON.parse(initLine) as { elements: string[] };
-  known = new Set(init.elements);
+  JSON.parse(initLine); // consume the init line (no fields needed)
   writeStdout('\0'); // ack
 } catch (e: unknown) {
   const msg = e instanceof Error ? e.message : String(e);
@@ -50,7 +48,7 @@ for (;;) {
   }
 
   try {
-    const output = processHTML(html, known);
+    const output = processHTML(html);
     writeStdout(output + '\0');
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

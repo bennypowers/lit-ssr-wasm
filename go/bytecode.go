@@ -5,7 +5,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"io"
 	"runtime"
@@ -132,15 +131,10 @@ func compileBytecode(ctx context.Context, mod api.Module, source []byte) ([]byte
 
 // NewFromBytecode creates a renderer pool from pre-compiled QuickJS bytecode.
 // Use CompileSource or CompileFiles to produce the bytecode.
-// Elements must list the custom element tag names registered by the source.
 // If workers is 0, defaults to runtime.NumCPU().
-func NewFromBytecode(ctx context.Context, bytecode []byte, elements []string, workers int) (*Renderer, error) {
+func NewFromBytecode(ctx context.Context, bytecode []byte, workers int) (*Renderer, error) {
 	if workers <= 0 {
 		workers = runtime.NumCPU()
-	}
-
-	if len(elements) == 0 {
-		return nil, fmt.Errorf("litssr: no elements provided")
 	}
 
 	rt := wazero.NewRuntime(ctx)
@@ -163,7 +157,7 @@ func NewFromBytecode(ctx context.Context, bytecode []byte, elements []string, wo
 	}
 
 	for i := range workers {
-		w, err := r.startBytecodeWorker(ctx, bytecode, elements, i)
+		w, err := r.startBytecodeWorker(ctx, bytecode, i)
 		if err != nil {
 			_ = r.Close(ctx)
 			return nil, fmt.Errorf("litssr: start bytecode worker %d: %w", i, err)
@@ -176,12 +170,7 @@ func NewFromBytecode(ctx context.Context, bytecode []byte, elements []string, wo
 	return r, nil
 }
 
-// bytecodeInitRequest is sent once per bytecode worker (elements only, no source).
-type bytecodeInitRequest struct {
-	Elements []string `json:"elements"`
-}
-
-func (r *Renderer) startBytecodeWorker(ctx context.Context, bytecode []byte, elements []string, _ int) (*worker, error) {
+func (r *Renderer) startBytecodeWorker(ctx context.Context, bytecode []byte, _ int) (*worker, error) {
 	stdinR, stdinW := io.Pipe()
 	stdoutR, stdoutW := io.Pipe()
 	stderr := &stderrCollector{}
@@ -244,8 +233,7 @@ func (r *Renderer) startBytecodeWorker(ctx context.Context, bytecode []byte, ele
 		stderr: stderr,
 	}
 
-	// Send simplified init message (elements only, no source)
-	if err := w.initBytecode(elements); err != nil {
+	if err := w.initBytecode(); err != nil {
 		_ = stdinW.Close()
 		return nil, err
 	}
@@ -253,26 +241,19 @@ func (r *Renderer) startBytecodeWorker(ctx context.Context, bytecode []byte, ele
 	return w, nil
 }
 
-// initBytecode sends the element list to a bytecode worker. No source is sent
-// because it was already compiled into the bytecode.
-func (w *worker) initBytecode(elements []string) error {
-	req := bytecodeInitRequest{Elements: elements}
-	payload, err := json.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("litssr: marshal init: %w", err)
-	}
-	payload = append(payload, '\n')
-
-	if _, err := w.stdin.Write(payload); err != nil {
+// initBytecode sends an empty init message to a bytecode worker.
+// The WASM loads the pre-compiled bytecode (which includes the component
+// source) and acks with \0.
+func (w *worker) initBytecode() error {
+	if _, err := w.stdin.Write([]byte("{}\n")); err != nil {
 		return fmt.Errorf("litssr: write init: %w", err)
 	}
 
-	// Wait for ack
-	ack, err := w.stdout.ReadString('\x00')
+	// Wait for ack (\0)
+	_, err := w.stdout.ReadString('\x00')
 	if err != nil {
 		return fmt.Errorf("litssr: read init ack: %w", err)
 	}
-	_ = ack
 
 	if errMsg := strings.TrimSpace(w.stderr.drain()); errMsg != "" {
 		return fmt.Errorf("litssr: init: %s", errMsg)

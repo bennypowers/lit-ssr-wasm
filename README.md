@@ -127,8 +127,7 @@ func main() {
 |---|---|
 | `NewFromFiles(ctx, files, workers)` | Bundle source files with esbuild and create a renderer pool. Handles TS, CSS imports, lit shims. |
 | `New(ctx, source, workers)` | Create a renderer pool from pre-bundled JS. No esbuild. |
-| `NewWithElements(ctx, source, elements, workers)` | Like `New` but with an explicit element list. |
-| `NewFromBytecode(ctx, bytecode, elements, workers)` | Create a renderer pool from pre-compiled QuickJS bytecode. Fastest init. |
+| `NewFromBytecode(ctx, bytecode, workers)` | Create a renderer pool from pre-compiled QuickJS bytecode. Fastest init. |
 
 #### Bytecode compilation
 
@@ -149,12 +148,15 @@ func main() {
 
 - **`NewFromFiles`** -- simplest option. Pass your `.ts`/`.js` source files
   and esbuild handles bundling. Good for most use cases.
-- **`New` / `NewWithElements`** -- you already have a bundled JS string (e.g.
-  from your own build pipeline). Skips esbuild.
+- **`New`** -- you already have a bundled JS string (e.g. from your own build
+  pipeline). Skips esbuild.
 - **`NewFromBytecode`** -- fastest worker init (~2.5x faster). Pre-compile
   your source to QuickJS bytecode once with `CompileSource`/`CompileFiles`,
   cache the bytecode, and reuse it across server restarts. Best for large
   bundles or many workers where init time matters.
+
+All constructors automatically discover which custom elements are registered
+by the source. No explicit element list is needed.
 
 ```go
 // Pre-compiled bytecode example
@@ -162,8 +164,7 @@ bytecode, err := litssr.CompileFiles(ctx, []string{"src/components.ts"})
 // cache bytecode to disk if desired:
 // os.WriteFile("ssr-bundle.qbc", bytecode, 0o644)
 
-elements := []string{"my-card", "my-alert"}
-renderer, err := litssr.NewFromBytecode(ctx, bytecode, elements, 0)
+renderer, err := litssr.NewFromBytecode(ctx, bytecode, 0)
 ```
 
 ### Performance
@@ -224,17 +225,19 @@ multiple renders, amortizing the ~350ms cold start.
 ### Phase 1: Init (once per worker)
 
 ```
-stdin:  {"source":"...","elements":["my-el","my-other"]}\n
+stdin:  {"source":"..."}\n
 stdout: \0  (ack)
 ```
 
 The WASM evaluates the component source and registers custom elements.
+Registered elements are automatically discovered and rendered with DSD;
+unregistered elements pass through unchanged.
 
 In **bytecode mode**, the source is already compiled into the bytecode, so the
-init message only contains elements:
+init message is empty:
 
 ```
-stdin:  {"elements":["my-el","my-other"]}\n
+stdin:  {}\n
 stdout: \0  (ack)
 ```
 

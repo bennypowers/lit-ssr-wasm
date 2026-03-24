@@ -12,11 +12,9 @@ import '@rhds/elements/rh-surface/rh-surface.js';
 import '@rhds/elements/rh-tag/rh-tag.js';
 import './components/highlighted-textarea.js';
 
-const KNOWN = new Set(['rh-subnav', 'rh-surface', 'rh-tag', 'highlighted-textarea']);
-
 try {
   const input = readStdin();
-  const output = processHTML(input, KNOWN);
+  const output = processHTML(input);
   writeStdout(output);
 } catch (e) {
   const msg = e instanceof Error ? e.message : String(e);

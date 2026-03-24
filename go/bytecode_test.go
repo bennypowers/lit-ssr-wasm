@@ -20,10 +20,11 @@ func TestCompileSource(t *testing.T) {
 }
 
 func TestCompileFilesTLA(t *testing.T) {
-	// The bytecode path uses the Javy plugin which does not support the
-	// event loop, so top-level await Promises never resolve. Components
-	// that use TLA must use the runtime path (New/NewFromFiles) instead.
-	t.Skip("bytecode path does not support TLA (Javy plugin lacks event loop)")
+	// The Javy plugin's invoke drains the module's top-level Promise
+	// after the synchronous module body has already run, so await in
+	// the bytecode entry doesn't actually pause execution. TLA
+	// components must use the runtime path (New/NewFromFiles) for now.
+	t.Skip("bytecode path does not support TLA (plugin evaluates TLA Promise after module body)")
 }
 
 func TestCompileFiles(t *testing.T) {

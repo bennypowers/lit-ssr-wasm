@@ -8,6 +8,10 @@
  * so they are registered with the customElements registry.
  * Registered elements are rendered with DSD; unregistered elements
  * pass through unchanged.
+ *
+ * SECURITY: Input is rendered via Lit's unsafeHTML directive without
+ * sanitization. Callers must ensure that input HTML is trusted or
+ * sanitized upstream to prevent XSS in the rendered output.
  */
 
 import { render } from '@lit-labs/ssr';

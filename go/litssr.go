@@ -13,6 +13,10 @@
 // registered via customElements.define() is automatically rendered with
 // DSD. Unregistered elements pass through unchanged.
 //
+// Security: HTML input is passed through without sanitization. Callers
+// must ensure that input to RenderHTML and RenderBatch is trusted or
+// sanitized upstream to prevent XSS in the rendered output.
+//
 // Usage:
 //
 //	source, _ := os.ReadFile("components.js")
@@ -258,7 +262,8 @@ func (w *worker) render(inputHTML string) (string, error) {
 }
 
 // RenderHTML sends HTML to a worker and returns the rendered result.
-// Safe for concurrent use.
+// Safe for concurrent use. Input HTML is not sanitized; callers must
+// ensure it is trusted to prevent XSS.
 func (r *Renderer) RenderHTML(ctx context.Context, inputHTML string) (string, error) {
 	resp := make(chan response, 1)
 	select {
@@ -275,7 +280,8 @@ func (r *Renderer) RenderHTML(ctx context.Context, inputHTML string) (string, er
 }
 
 // RenderBatch renders multiple HTML strings, distributing across workers.
-// Returns results in the same order as inputs.
+// Returns results in the same order as inputs. Input HTML is not sanitized;
+// callers must ensure it is trusted to prevent XSS.
 func (r *Renderer) RenderBatch(ctx context.Context, inputs []string) ([]string, error) {
 	results := make([]string, len(inputs))
 	resps := make([]chan response, len(inputs))

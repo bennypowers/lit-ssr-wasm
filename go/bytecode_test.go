@@ -19,6 +19,13 @@ func TestCompileSource(t *testing.T) {
 	}
 }
 
+func TestCompileFilesTLA(t *testing.T) {
+	// The bytecode path uses the Javy plugin which does not support the
+	// event loop, so top-level await Promises never resolve. Components
+	// that use TLA must use the runtime path (New/NewFromFiles) instead.
+	t.Skip("bytecode path does not support TLA (Javy plugin lacks event loop)")
+}
+
 func TestCompileFiles(t *testing.T) {
 	ctx := context.Background()
 	bytecode, err := CompileFiles(ctx, []string{"testdata/unbundled-component.ts"})

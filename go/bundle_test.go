@@ -115,6 +115,25 @@ func TestNewFromFilesExported(t *testing.T) {
 	}
 }
 
+func TestNewFromFilesTLA(t *testing.T) {
+	r, err := NewFromFiles(context.Background(), []string{"testdata/tla-component.ts"}, 1)
+	if err != nil {
+		t.Fatalf("NewFromFiles: %v", err)
+	}
+	t.Cleanup(func() { r.Close(context.Background()) })
+
+	out, err := r.RenderHTML(context.Background(), `<tla-el></tla-el>`)
+	if err != nil {
+		t.Fatalf("RenderHTML: %v", err)
+	}
+	if !strings.Contains(out, `shadowrootmode="open"`) {
+		t.Error("missing DSD in output")
+	}
+	if !strings.Contains(out, "async-loaded") {
+		t.Error("TLA data should appear in rendered output")
+	}
+}
+
 func TestNewFromFilesCSS(t *testing.T) {
 	r, err := NewFromFiles(context.Background(), []string{"testdata/css-component/css-el.ts"}, 1)
 	if err != nil {

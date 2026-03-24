@@ -34,7 +34,7 @@
       ]
     },
     "build:wasm": {
-      "command": "javy build -J javy-stream-io=y -J text-encoding=y dist/lit-ssr-runtime-javy.js -o dist/lit-ssr-runtime.wasm && javy build -J javy-stream-io=y -J text-encoding=y dist/lit-ssr-demo-javy.js -o dist/lit-ssr-demo.wasm",
+      "command": "javy build -J javy-stream-io=y -J text-encoding=y -J event-loop=y dist/lit-ssr-runtime-javy.js -o dist/lit-ssr-runtime.wasm && javy build -J javy-stream-io=y -J text-encoding=y -J event-loop=y dist/lit-ssr-demo-javy.js -o dist/lit-ssr-demo.wasm",
       "dependencies": [
         "build:js"
       ],

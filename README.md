@@ -158,6 +158,17 @@ func main() {
 All constructors automatically discover which custom elements are registered
 by the source. No explicit element list is needed.
 
+### Top-level await
+
+Components that use top-level await (e.g. `await import('./ssr.js')`) are
+supported by `New`, `NewFromFiles`, and the CLI. The esbuild pipeline bundles
+as ESM and wraps the output in an async IIFE automatically.
+
+> **Note:** `NewFromBytecode` does not currently support top-level await.
+> The Javy plugin evaluates module-level Promises after the synchronous module
+> body has already run, so `await` in the bytecode entry does not pause
+> execution as expected. Components with TLA should use the runtime path.
+
 ```go
 // Pre-compiled bytecode example
 bytecode, err := litssr.CompileFiles(ctx, []string{"src/components.ts"})

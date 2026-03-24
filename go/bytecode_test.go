@@ -29,7 +29,7 @@ func TestCompileFiles(t *testing.T) {
 		t.Fatal("CompileFiles returned empty bytecode")
 	}
 
-	r, err := NewFromBytecode(ctx, bytecode, []string{"unbundled-el"}, 1)
+	r, err := NewFromBytecode(ctx, bytecode, 1)
 	if err != nil {
 		t.Fatalf("NewFromBytecode: %v", err)
 	}
@@ -51,8 +51,7 @@ func bytecodeRenderer(t *testing.T) *Renderer {
 	if err != nil {
 		t.Fatalf("CompileSource: %v", err)
 	}
-	elements := extractElements(testSource)
-	r, err := NewFromBytecode(ctx, bytecode, elements, 2)
+	r, err := NewFromBytecode(ctx, bytecode, 2)
 	if err != nil {
 		t.Fatalf("NewFromBytecode: %v", err)
 	}
@@ -181,11 +180,10 @@ func BenchmarkNewFromBytecode(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	elements := extractElements(testSource)
 
 	b.ResetTimer()
 	for range b.N {
-		r, err := NewFromBytecode(ctx, bytecode, elements, 0)
+		r, err := NewFromBytecode(ctx, bytecode, 0)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -201,8 +199,7 @@ func BenchmarkRenderHTMLBytecode(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	elements := extractElements(testSource)
-	r, err := NewFromBytecode(ctx, bytecode, elements, 0)
+	r, err := NewFromBytecode(ctx, bytecode, 0)
 	if err != nil {
 		b.Fatal(err)
 	}

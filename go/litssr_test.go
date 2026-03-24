@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -32,23 +33,20 @@ func golden(t *testing.T, name string) string {
 	return string(data)
 }
 
-func TestExtractElements(t *testing.T) {
-	elements := extractElements(testSource)
-	want := []string{"test-card", "test-badge", "test-sheet"}
-	if len(elements) != len(want) {
-		t.Fatalf("got %d elements, want %d", len(elements), len(want))
+func TestNoDefinesPassthrough(t *testing.T) {
+	r, err := New(context.Background(), "// no components here", 1)
+	if err != nil {
+		t.Fatalf("New: %v", err)
 	}
-	for i, e := range elements {
-		if e != want[i] {
-			t.Errorf("element %d: got %q, want %q", i, e, want[i])
-		}
-	}
-}
+	defer r.Close(context.Background())
 
-func TestNoDefines(t *testing.T) {
-	_, err := New(context.Background(), "// no components here", 1)
-	if err == nil {
-		t.Fatal("expected error for source with no customElements.define calls")
+	input := `<unknown-el>hello</unknown-el>`
+	got, err := r.RenderHTML(context.Background(), input)
+	if err != nil {
+		t.Fatalf("RenderHTML: %v", err)
+	}
+	if !strings.Contains(got, input) {
+		t.Errorf("expected passthrough content\ngot: %s", got)
 	}
 }
 
@@ -174,14 +172,11 @@ func TestConcurrent(t *testing.T) {
 }
 
 func TestCloseRace(t *testing.T) {
-	// Reproduces issue #7: Close() races with WASM I/O goroutines.
-	// Run with -race to verify.
 	for range 10 {
 		r, err := New(context.Background(), testSource, 2)
 		if err != nil {
 			t.Fatalf("New: %v", err)
 		}
-		// Close immediately without rendering -- workers are blocked on stdin.
 		if err := r.Close(context.Background()); err != nil {
 			t.Fatalf("Close: %v", err)
 		}

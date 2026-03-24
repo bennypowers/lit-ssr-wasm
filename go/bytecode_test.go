@@ -19,6 +19,14 @@ func TestCompileSource(t *testing.T) {
 	}
 }
 
+func TestCompileFilesTLA(t *testing.T) {
+	// The Javy plugin's invoke drains the module's top-level Promise
+	// after the synchronous module body has already run, so await in
+	// the bytecode entry doesn't actually pause execution. TLA
+	// components must use the runtime path (New/NewFromFiles) for now.
+	t.Skip("bytecode path does not support TLA (plugin evaluates TLA Promise after module body)")
+}
+
 func TestCompileFiles(t *testing.T) {
 	ctx := context.Background()
 	bytecode, err := CompileFiles(ctx, []string{"testdata/unbundled-component.ts"})

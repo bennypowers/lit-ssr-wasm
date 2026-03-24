@@ -22,7 +22,7 @@ if (initLine === null) throw new Error('unexpected EOF before init');
 try {
   const init = JSON.parse(initLine) as { source: string };
   if (init.source) {
-    (0, eval)(init.source);
+    await (0, eval)(init.source);
   }
   writeStdout('\0'); // ack
 } catch (e: unknown) {

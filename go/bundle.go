@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -40,7 +41,7 @@ func bundleSource(source, resolveDir string) (string, error) {
 		return "", fmt.Errorf("litssr: bundle produced no output")
 	}
 
-	return string(result.OutputFiles[0].Contents), nil
+	return wrapESMForEval(string(result.OutputFiles[0].Contents)), nil
 }
 
 // bundleFiles reads and bundles multiple JS/TS files into a single
@@ -87,6 +88,20 @@ func findNodeModules(dir string) []string {
 	return paths
 }
 
+// exportBlockRe matches a trailing export block produced by esbuild's ESM
+// format. The block is always at the end of the output and lists re-exported
+// bindings. It is safe to strip because element registration happens via
+// customElements.define() side effects, not via exports.
+var exportBlockRe = regexp.MustCompile(`(?m)^export\s*\{[^}]*\};\s*$`)
+
+// wrapESMForEval strips the trailing export block from esbuild's ESM output
+// and wraps the result in an async IIFE so that top-level await works in
+// QuickJS's eval() (which runs code as a script, not a module).
+func wrapESMForEval(esm string) string {
+	stripped := exportBlockRe.ReplaceAllString(esm, "")
+	return "(async function(){" + stripped + "})();\n"
+}
+
 // ssrBuildOptions returns esbuild options configured for lit-ssr-wasm
 // runtime compatibility. nodePaths allows specifying additional directories
 // for module resolution (e.g., a project's node_modules).
@@ -94,7 +109,7 @@ func ssrBuildOptions(stdin api.StdinOptions, nodePaths []string) api.BuildOption
 	return api.BuildOptions{
 		Stdin:      &stdin,
 		Bundle:     true,
-		Format:     api.FormatIIFE,
+		Format:     api.FormatESModule,
 		Target:     api.ES2022,
 		Platform:   api.PlatformNode,
 		Conditions: []string{"node"},

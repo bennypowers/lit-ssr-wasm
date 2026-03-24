@@ -30,10 +30,11 @@ const userSourcePlaceholder = `globalThis.__LITSSR_USER_SOURCE__ = true;`
 // Bytecode is tied to the QuickJS engine version embedded in the Javy plugin.
 // Cache invalidation is the caller's responsibility when upgrading Javy.
 func CompileSource(ctx context.Context, componentSource string) ([]byte, error) {
-	// Wrap user source in an IIFE to isolate its scope from the template.
-	// Both the template and user source bundle Lit independently; without
-	// isolation their mangled variable names collide.
-	wrapped := "(function(){" + componentSource + "})();\n"
+	// Wrap user source in an async IIFE to isolate its scope from the
+	// template and support top-level await. Both the template and user
+	// source bundle Lit independently; without isolation their mangled
+	// variable names collide.
+	wrapped := "(async function(){" + componentSource + "})();\n"
 	combined := strings.Replace(bytecodeEntryTemplate, userSourcePlaceholder, wrapped, 1)
 	if combined == bytecodeEntryTemplate {
 		return nil, fmt.Errorf("litssr: compile: user source placeholder not found in template")

@@ -125,12 +125,11 @@ func renderMain(args []string) int {
 	results, err := renderer.RenderBatch(ctx, inputs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "lit-ssr render: %v\n", err)
-		return 1
 	}
 
-	failed := false
+	failed := err != nil
 	for i, result := range results {
-		if err := os.WriteFile(htmlFiles[i], []byte(result), perms[i]); err != nil {
+		if err := writeFileAtomic(htmlFiles[i], []byte(result), perms[i]); err != nil {
 			fmt.Fprintf(os.Stderr, "lit-ssr render: write %s: %v\n", htmlFiles[i], err)
 			failed = true
 		}
@@ -139,6 +138,40 @@ func renderMain(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// writeFileAtomic writes data to a temp file in the same directory, syncs it,
+// then renames it over dst to avoid truncating the original on failure.
+func writeFileAtomic(dst string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(dst)
+	tmp, err := os.CreateTemp(dir, ".lit-ssr-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+
+	cleanup := func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+	}
+
+	if _, err := tmp.Write(data); err != nil {
+		cleanup()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		cleanup()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return os.Rename(tmpPath, dst)
 }
 
 func createRenderer(ctx context.Context, skipBundle, dir string, args []string) (*litssr.Renderer, error) {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -146,13 +147,15 @@ func TestRenderSubcommand(t *testing.T) {
 		t.Errorf("badge.html mismatch\ngot:\n%s\nwant:\n%s", gotBadge, wantBadge)
 	}
 
-	// Verify file permissions preserved
-	info, err := os.Stat(badgePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0o640 {
-		t.Errorf("badge.html permissions: got %o, want 640", info.Mode().Perm())
+	// Verify file permissions preserved (Unix only; Windows doesn't support fine-grained mode bits)
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(badgePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o640 {
+			t.Errorf("badge.html permissions: got %o, want 640", info.Mode().Perm())
+		}
 	}
 }
 

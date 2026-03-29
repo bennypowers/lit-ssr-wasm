@@ -171,7 +171,11 @@ func writeFileAtomic(dst string, data []byte, perm os.FileMode) error {
 		_ = os.Remove(tmpPath)
 		return err
 	}
-	return os.Rename(tmpPath, dst)
+	if err := os.Rename(tmpPath, dst); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 func createRenderer(ctx context.Context, skipBundle, dir string, args []string) (*litssr.Renderer, error) {

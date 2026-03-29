@@ -20,6 +20,9 @@ func TestMain(m *testing.M) {
 	defer func() { _ = os.RemoveAll(tmp) }()
 
 	binaryPath = filepath.Join(tmp, "lit-ssr")
+	if runtime.GOOS == "windows" {
+		binaryPath += ".exe"
+	}
 	cmd := exec.Command("go", "build", "-o", binaryPath, ".")
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {

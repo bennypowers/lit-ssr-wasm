@@ -1,15 +1,19 @@
 // lit-ssr is a CLI for server-rendering Lit web components via WASM.
 //
 // Component definitions are loaded from JS/TS files at startup and
-// automatically bundled with esbuild. It reads NUL-terminated HTML from
-// stdin, renders each with Declarative Shadow DOM, and writes
-// NUL-terminated results to stdout.
+// automatically bundled with esbuild. In the default (stdin) mode it reads
+// NUL-terminated HTML from stdin, renders each with Declarative Shadow DOM,
+// and writes NUL-terminated results to stdout.
+//
+// The render subcommand processes HTML files in-place, useful for SSG
+// post-processing workflows.
 //
 // Usage:
 //
-//	lit-ssr src/my-card.ts src/my-alert.ts
-//	lit-ssr --dir ./components/
-//	lit-ssr --skip-bundle dist/components.js
+//	lit-ssr src/my-card.ts src/my-alert.ts          # stdin/stdout NUL protocol
+//	lit-ssr --dir ./components/                     # stdin/stdout NUL protocol
+//	lit-ssr --skip-bundle dist/components.js        # stdin/stdout NUL protocol
+//	lit-ssr render --dir ./components/ out/**/*.html # render files in-place
 package main
 
 import (
@@ -25,6 +29,13 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "render" {
+		os.Exit(renderMain(os.Args[2:]))
+	}
+	os.Exit(stdinMain())
+}
+
+func stdinMain() int {
 	var skipBundle string
 	var dir string
 	flag.StringVar(&skipBundle, "skip-bundle", "", "path to a pre-bundled JS file (skips esbuild)")
@@ -36,9 +47,9 @@ func main() {
 	renderer, err := createRenderer(ctx, skipBundle, dir, flag.Args())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "lit-ssr: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
-	defer renderer.Close(ctx)
+	defer func() { _ = renderer.Close(ctx) }()
 
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
@@ -54,14 +65,80 @@ func main() {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "lit-ssr: %v\n", err)
 		}
-		os.Stdout.WriteString(output)
-		os.Stdout.Write([]byte{0})
+		_, _ = os.Stdout.WriteString(output)
+		_, _ = os.Stdout.Write([]byte{0})
 	}
 
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintf(os.Stderr, "lit-ssr: read error: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
+}
+
+func renderMain(args []string) int {
+	fs := flag.NewFlagSet("render", flag.ExitOnError)
+	var skipBundle string
+	var dir string
+	fs.StringVar(&skipBundle, "skip-bundle", "", "path to a pre-bundled JS file (skips esbuild)")
+	fs.StringVar(&dir, "dir", "", "directory of component source files (*.ts, *.js)")
+	_ = fs.Parse(args)
+
+	htmlFiles := fs.Args()
+	if len(htmlFiles) == 0 {
+		fmt.Fprintf(os.Stderr, "lit-ssr render: no HTML files specified\n")
+		return 1
+	}
+
+	if skipBundle == "" && dir == "" {
+		fmt.Fprintf(os.Stderr, "lit-ssr render: --dir or --skip-bundle is required\n")
+		return 1
+	}
+
+	ctx := context.Background()
+
+	renderer, err := createRenderer(ctx, skipBundle, dir, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "lit-ssr render: %v\n", err)
+		return 1
+	}
+	defer func() { _ = renderer.Close(ctx) }()
+
+	// Read all files
+	inputs := make([]string, len(htmlFiles))
+	perms := make([]os.FileMode, len(htmlFiles))
+	for i, path := range htmlFiles {
+		info, err := os.Stat(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "lit-ssr render: %v\n", err)
+			return 1
+		}
+		perms[i] = info.Mode().Perm()
+		data, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "lit-ssr render: %v\n", err)
+			return 1
+		}
+		inputs[i] = string(data)
+	}
+
+	results, err := renderer.RenderBatch(ctx, inputs)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "lit-ssr render: %v\n", err)
+		return 1
+	}
+
+	failed := false
+	for i, result := range results {
+		if err := os.WriteFile(htmlFiles[i], []byte(result), perms[i]); err != nil {
+			fmt.Fprintf(os.Stderr, "lit-ssr render: write %s: %v\n", htmlFiles[i], err)
+			failed = true
+		}
+	}
+	if failed {
+		return 1
+	}
+	return 0
 }
 
 func createRenderer(ctx context.Context, skipBundle, dir string, args []string) (*litssr.Renderer, error) {
@@ -74,7 +151,7 @@ func createRenderer(ctx context.Context, skipBundle, dir string, args []string) 
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", skipBundle, err)
 		}
-		return litssr.New(ctx, string(data), 1)
+		return litssr.New(ctx, string(data), 0)
 	}
 
 	// Collect files from --dir and/or positional args
@@ -125,7 +202,7 @@ func createRenderer(ctx context.Context, skipBundle, dir string, args []string) 
 		deduped = append(deduped, f)
 	}
 
-	return litssr.NewFromFiles(ctx, deduped, 1)
+	return litssr.NewFromFiles(ctx, deduped, 0)
 }
 
 func splitNul(data []byte, atEOF bool) (advance int, token []byte, err error) {

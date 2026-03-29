@@ -17,8 +17,6 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	defer func() { _ = os.RemoveAll(tmp) }()
-
 	binaryPath = filepath.Join(tmp, "lit-ssr")
 	if runtime.GOOS == "windows" {
 		binaryPath += ".exe"
@@ -29,7 +27,9 @@ func TestMain(m *testing.M) {
 		panic("go build failed: " + err.Error())
 	}
 
-	os.Exit(m.Run())
+	code := m.Run()
+	_ = os.RemoveAll(tmp)
+	os.Exit(code)
 }
 
 func testdataPath(name string) string {

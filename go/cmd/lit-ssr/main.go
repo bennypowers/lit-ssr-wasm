@@ -77,12 +77,15 @@ func stdinMain() int {
 }
 
 func renderMain(args []string) int {
-	fs := flag.NewFlagSet("render", flag.ExitOnError)
+	fs := flag.NewFlagSet("render", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
 	var skipBundle string
 	var dir string
 	fs.StringVar(&skipBundle, "skip-bundle", "", "path to a pre-bundled JS file (skips esbuild)")
 	fs.StringVar(&dir, "dir", "", "directory of component source files (*.ts, *.js)")
-	_ = fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
 
 	htmlFiles := fs.Args()
 	if len(htmlFiles) == 0 {
@@ -125,9 +128,10 @@ func renderMain(args []string) int {
 	results, err := renderer.RenderBatch(ctx, inputs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "lit-ssr render: %v\n", err)
+		return 1
 	}
 
-	failed := err != nil
+	failed := false
 	for i, result := range results {
 		if err := writeFileAtomic(htmlFiles[i], []byte(result), perms[i]); err != nil {
 			fmt.Fprintf(os.Stderr, "lit-ssr render: write %s: %v\n", htmlFiles[i], err)

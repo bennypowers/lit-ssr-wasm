@@ -84,6 +84,9 @@ func renderMain(args []string) int {
 	fs.StringVar(&skipBundle, "skip-bundle", "", "path to a pre-bundled JS file (skips esbuild)")
 	fs.StringVar(&dir, "dir", "", "directory of component source files (*.ts, *.js)")
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
 		return 1
 	}
 
